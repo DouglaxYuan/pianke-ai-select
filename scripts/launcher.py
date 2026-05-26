@@ -204,6 +204,35 @@ def ask_modes(previous: list[str] | None) -> list[str]:
         return chosen
 
 
+def ask_runtime(previous: str | None) -> str:
+    print()
+    if previous:
+        print(f"上次运行时设备偏好：{previous}")
+        print("直接回车 = 沿用；否则请选择。")
+    else:
+        print("请选择本地运行时设备偏好：")
+
+    print()
+    print("  1) auto  自动（检测到可用 GPU 就优先用）")
+    print("  2) cpu   只用 CPU")
+    print("  3) gpu   强制用 GPU（没有可用 GPU 就报错）")
+
+    mapping = {"1": "auto", "2": "cpu", "3": "gpu"}
+    while True:
+        try:
+            raw = input("\n> ").strip().lower()
+        except EOFError:
+            raw = ""
+
+        if not raw and previous:
+            return previous
+        if raw in {"auto", "cpu", "gpu"}:
+            return raw
+        if raw in mapping:
+            return mapping[raw]
+        print("无法识别，请输入 1/2/3 或 auto/cpu/gpu。")
+
+
 # ---------- GitHub 更新检查 ----------
 
 def http_get(url: str, timeout: float = 8.0) -> bytes:
@@ -544,7 +573,9 @@ def run_app(port: int) -> int:
     if USE_MIRROR:
         # 让 transformers / huggingface_hub 走国内镜像
         env.setdefault("HF_ENDPOINT", HF_MIRROR)
-    cmd = [str(PY_IN_VENV), "app.py", "--port", str(port)]
+    runtime = (load_install().get("runtime") or "auto").strip().lower() or "auto"
+    env["PIC_SELECTER_RUNTIME"] = runtime
+    cmd = [str(PY_IN_VENV), "app.py", "--port", str(port), "--runtime", runtime]
     try:
         return subprocess.call(cmd, cwd=str(ROOT), env=env)
     except KeyboardInterrupt:
@@ -577,6 +608,9 @@ def main() -> int:
     modes = ask_modes(prev_modes)
     info(f"本次启用：{', '.join(modes)}")
     install["modes"] = modes
+    runtime = ask_runtime(install.get("runtime"))
+    info(f"运行时设备偏好：{runtime}")
+    install["runtime"] = runtime
     save_install(install)
 
     # 步骤 3：venv + 依赖

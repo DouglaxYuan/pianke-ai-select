@@ -51,6 +51,19 @@ def _legacy_cache_base() -> Path:
     return Path.home() / ".cache"
 
 
+def _runtime_preference() -> str:
+    choice = _env_choice("PIC_SELECTER_RUNTIME", {"auto", "cpu", "gpu"})
+    return choice or "auto"
+
+
+def reset_runtime_state() -> None:
+    """切换 runtime 后清空已加载模型与设备缓存。"""
+    global _DEVICE
+    with _LOCK:
+        _models.clear()
+        _DEVICE = None
+
+
 def _env_choice(name: str, allowed: set[str]) -> str | None:
     value = (os.environ.get(name) or "").strip().lower()
     if not value:
@@ -66,7 +79,17 @@ def _device():
     if _DEVICE is not None:
         return _DEVICE
     import torch
+    runtime = _runtime_preference()
     forced = _env_choice("PIC_SELECTER_DEVICE", {"cpu", "cuda", "mps"})
+    if runtime == "cpu" and forced is None:
+        forced = "cpu"
+    elif runtime == "gpu" and forced is None:
+        if torch.cuda.is_available():
+            forced = "cuda"
+        elif torch.backends.mps.is_available():
+            forced = "mps"
+        else:
+            raise VisionUnavailable("PIC_SELECTER_RUNTIME=gpu，但当前既无 CUDA 也无 MPS。")
     if forced == "cuda":
         if not torch.cuda.is_available():
             raise VisionUnavailable("PIC_SELECTER_DEVICE=cuda，但当前 torch 不支持 CUDA。")
@@ -244,7 +267,10 @@ def _ensure_model_storage_configured() -> None:
 
 def _pyiqa_device():
     import torch
+    runtime = _runtime_preference()
     forced = _env_choice("PIC_SELECTER_PYIQA_DEVICE", {"cpu", "cuda"})
+    if runtime == "cpu" and forced is None:
+        return torch.device("cpu")
     if forced == "cuda":
         if not torch.cuda.is_available():
             raise VisionUnavailable("PIC_SELECTER_PYIQA_DEVICE=cuda，但当前 torch 不支持 CUDA。")
@@ -276,7 +302,12 @@ def _create_pyiqa_metric(metric_name: str, label: str):
 
 
 def _select_onnx_providers(available: list[str]) -> tuple[list[str], int]:
+    runtime = _runtime_preference()
     forced = _env_choice("PIC_SELECTER_ONNX_PROVIDER", {"cpu", "cuda"})
+    if runtime == "cpu" and forced is None:
+        return ["CPUExecutionProvider"], -1
+    if runtime == "gpu" and forced is None:
+        forced = "cuda"
     if forced == "cuda":
         if "CUDAExecutionProvider" not in available:
             raise VisionUnavailable(

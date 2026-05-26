@@ -152,6 +152,22 @@
               </label>
             </div>
 
+            <div class="opt-section">
+              <div class="opt-label">运行设备</div>
+              <label class="radio">
+                <input type="radio" name="runtime" value="auto" checked>
+                <span><strong>自动</strong> · 检测到可用 GPU 就优先使用</span>
+              </label>
+              <label class="radio">
+                <input type="radio" name="runtime" value="cpu">
+                <span><strong>CPU</strong> · 兼容优先，适合排查问题</span>
+              </label>
+              <label class="radio">
+                <input type="radio" name="runtime" value="gpu">
+                <span><strong>GPU</strong> · 强制本地独显，没有可用 GPU 就报错</span>
+              </label>
+            </div>
+
             <div class="opt-section" id="prescreen-strength-row">
               <div class="opt-label">初筛力度</div>
               <label class="radio">

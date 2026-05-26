@@ -67,6 +67,23 @@ font-size='22' fill='#6b6256'>无法读取</text>
 </svg>""".encode("utf-8")
 
 
+def _normalize_runtime(value: str | None) -> str:
+    runtime = (value or "").strip().lower()
+    return runtime if runtime in ("auto", "cpu", "gpu") else "auto"
+
+
+def _apply_runtime_selection(runtime: str) -> None:
+    runtime = _normalize_runtime(runtime)
+    prev = _normalize_runtime(os.environ.get("PIC_SELECTER_RUNTIME"))
+    os.environ["PIC_SELECTER_RUNTIME"] = runtime
+    if prev != runtime:
+        try:
+            from pic_selecter import vision
+            vision.reset_runtime_state()
+        except Exception:
+            pass
+
+
 # ---------------- 状态 ----------------
 
 @dataclass
@@ -95,6 +112,7 @@ class SessionState:
     dry_run: bool
     mode: str = "copy"                              # copy | move
     engine: str = "fast"                            # fast | expert（极速 vs 专家）
+    runtime: str = "auto"                           # auto | cpu | gpu
     groups: list[GroupState] = field(default_factory=list)
     current_group: int = 0
     threshold_near: int = THRESHOLD_NEAR
@@ -2047,6 +2065,7 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
             prescreen_strength=prescreen_strength,
             engine=engine,
         )
+        sess.runtime = _normalize_runtime(os.environ.get("PIC_SELECTER_RUNTIME"))
         sess.prescreen_enabled = prescreen_enabled
         sess.prescreen_strength = prescreen_strength
         sess.prescreen_reviewed = True
@@ -2240,6 +2259,7 @@ def api_start():
     global JOB, SESSION
     data = request.get_json(force=True)
     folder = (data.get("folder") or "").strip()
+    runtime = _normalize_runtime(data.get("runtime"))
     dry_run = bool(data.get("dry_run", False))
     wipe_cache = bool(data.get("wipe_cache", False))
     mode = data.get("mode", "copy")
@@ -2274,6 +2294,7 @@ def api_start():
         if JOB and JOB.status in ("pending", "scanning", "hashing", "grouping"):
             return jsonify({"error": "已有任务在跑，请稍候"}), 409
 
+        _apply_runtime_selection(runtime)
         # 一次性运行：始终全新开始，不读旧 state，不复用缓存。
         # 旧的 state.json / winners / losers 由 _run_job 里的 _wipe_caches 清掉。
         JOB = JobState(
@@ -3730,11 +3751,14 @@ def main():
     parser = argparse.ArgumentParser(description="本地照片擂台选片工具")
     parser.add_argument("--port", type=int, default=5057)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--runtime", choices=["auto", "cpu", "gpu"], default="auto")
     args = parser.parse_args()
 
+    _apply_runtime_selection(args.runtime)
     setup_logger(None)
     url = f"http://localhost:{args.port}"
     print(f"\n启动于 {url}")
+    print(f"运行时设备偏好: {args.runtime}")
     if SCRIPT_TOKEN:
         print(f"（脚本访问 token 已启用：X-Token: {SCRIPT_TOKEN[:8]}...）")
     if not args.no_browser:

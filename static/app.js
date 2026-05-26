@@ -6,6 +6,7 @@ const RECENT_KEY = "pic-arena.recent-folders";
 const TUTORIAL_KEY = "pic-arena.tutorial-seen";
 const CONFIRM_MOVE_KEY = "pic-arena.confirmed-move";
 const CONFIRM_REAL_KEY = "pic-arena.confirmed-real";
+const RUNTIME_KEY = "pic_selecter.runtime";
 const VERDICT_HOLD_MS = 380;
 
 let busy = false;
@@ -255,6 +256,9 @@ bindSlider($("thr-near-secs"), $("thr-near-secs-val"));
 function currentEngine() {
   return document.querySelector('input[name="engine"]:checked')?.value || "fast";
 }
+function currentRuntime() {
+  return document.querySelector('input[name="runtime"]:checked')?.value || "auto";
+}
 function syncPrescreenStrength() {
   const on = $("opt-prescreen").checked;
   $("prescreen-strength-row").classList.toggle("is-disabled", !on);
@@ -492,6 +496,18 @@ if (llmRefreshBtn) {
 
 syncEngineSwitch();
 
+function restoreRuntimeChoice() {
+  const saved = localStorage.getItem(RUNTIME_KEY) || "auto";
+  const input = document.querySelector(`input[name="runtime"][value="${saved}"]`);
+  if (input) input.checked = true;
+}
+document.querySelectorAll('input[name="runtime"]').forEach((el) => {
+  el.addEventListener("change", () => {
+    localStorage.setItem(RUNTIME_KEY, currentRuntime());
+  });
+});
+restoreRuntimeChoice();
+
 // 后端没装 insightface → 把人脸感知开关锁死置灰
 (async () => {
   try {
@@ -598,6 +614,7 @@ async function handleStart(e) {
   const wipe_cache = true;
   const mode = document.querySelector('input[name="mode"]:checked')?.value || "copy";
   const engine = currentEngine();
+  const runtime = currentRuntime();
   const prescreen_enabled = $("opt-prescreen").checked;
   const prescreen_strength = document.querySelector('input[name="prescreen-strength"]:checked')?.value || "standard";
   // 极速模式后端会强制忽略 face_aware，这里也明确传 false 避免歧义
@@ -637,7 +654,7 @@ async function handleStart(e) {
     const r = await fetchJSON("/api/start", {
       method: "POST",
       body: JSON.stringify({
-        folder, dry_run, wipe_cache, mode, engine,
+        folder, dry_run, wipe_cache, mode, engine, runtime,
         threshold_near, threshold_far, near_seconds,
         prescreen_enabled, prescreen_strength, face_aware,
         llm_model,
@@ -2451,6 +2468,7 @@ $("btn-redo-folder").addEventListener("click", async () => {
         wipe_cache: true,
         mode: s.mode || "copy",
         engine: s.engine || "fast",
+        runtime: s.runtime || localStorage.getItem(RUNTIME_KEY) || "auto",
         threshold_near: s.threshold_near,
         threshold_far: s.threshold_far,
         near_seconds: s.near_seconds,
