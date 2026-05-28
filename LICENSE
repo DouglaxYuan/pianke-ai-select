@@ -1,143 +1,122 @@
-PolyForm Noncommercial License 1.0.0
+片刻 软件使用许可协议（v2，2026-05-28）
+Pianke Software License Agreement (v2, 2026-05-28)
 
-<https://polyformproject.org/licenses/noncommercial/1.0.0>
-
-Required Notice: Copyright (c) 2025-2026 zhaoyue (Charles146). 联系作者商用授权 / Contact for commercial license: 微信 WeChat 15828377122
-
-## Acceptance
-
-In order to get any license under these terms, you must agree to them as
-both strict obligations and conditions to all your licenses.
-
-## Copyright License
-
-The licensor grants you a copyright license for the software to do
-everything you might do with the software that would otherwise infringe
-the licensor's copyright in it for any permitted purpose. However, you
-may only distribute the software according to Distribution License and
-make changes or new works based on the software according to Changes
-and New Works License.
-
-## Distribution License
-
-The licensor grants you an additional copyright license to distribute
-copies of the software. Your license to distribute covers distributing
-the software with changes and new works permitted by Changes and New
-Works License.
-
-## Notices
-
-You must ensure that anyone who gets a copy of any part of the software
-from you also gets a copy of these terms or the URL for them above, as
-well as copies of any plain-text lines beginning with `Required Notice:`
-that the licensor provided with the software. For example:
-
-> Required Notice: Copyright (c) 2025-2026 zhaoyue (Charles146).
-> 联系作者商用授权 / Contact for commercial license: 微信 WeChat 15828377122
-
-## Changes and New Works License
-
-The licensor grants you an additional copyright license to make changes
-and new works based on the software for any permitted purpose.
-
-## Patent License
-
-The licensor grants you a patent license for the software that covers
-patent claims the licensor can license, or becomes able to license,
-that you would infringe by using the software.
-
-## Noncommercial Purposes
-
-Any noncommercial purpose is a permitted purpose.
-
-## Personal Uses
-
-Personal use for research, experiment, and testing for the benefit of
-public knowledge, personal study, private entertainment, hobby
-projects, amateur pursuits, or religious observance, without any
-anticipated commercial application, is use for a permitted purpose.
-
-## Noncommercial Organizations
-
-Use by any charitable organization, educational institution, public
-research organization, public safety or health organization,
-environmental protection organization, or government institution is
-use for a permitted purpose regardless of the source of funding or
-obligations resulting from the funding.
-
-## Fair Use
-
-You may have "fair use" rights for the software under the law. These
-terms do not limit them.
-
-## No Other Rights
-
-These terms do not allow you to sublicense or transfer any of your
-licenses to anyone else, or prevent the licensor from granting
-licenses to anyone else. These terms do not imply any other licenses.
-
-## Patent Defense
-
-If you make any written claim that the software infringes or
-contributes to infringement of any patent, your patent license for the
-software granted under these terms ends immediately. If your company
-makes such a claim, your patent license ends immediately for work on
-behalf of your company.
-
-## Violations
-
-The first time you are notified in writing that you have violated any
-of these terms, or done anything with the software not covered by your
-licenses, your licenses can nonetheless continue if you come into full
-compliance with these terms, and take practical steps to correct past
-violations, within 32 days of receiving notice. Otherwise, all your
-licenses end immediately.
-
-## No Liability
-
-***As far as the law allows, the software comes as is, without any
-warranty or condition, and the licensor will not be liable to you for
-any damages arising out of these terms or the use or nature of the
-software, under any kind of legal claim.***
-
-## Definitions
-
-The **licensor** is the individual or entity offering these terms, and
-the **software** is the software the licensor makes available under
-these terms.
-
-**You** refers to the individual or entity agreeing to these terms.
-
-**Your company** is any legal entity, sole proprietorship, or other
-kind of organization that you work for, plus all organizations that
-have control over, are under the control of, or are under common
-control with that organization. **Control** means ownership of
-substantially all the assets of an entity, or the power to direct its
-management and policies by vote, contract, or otherwise. Control can
-be direct or indirect.
-
-**Your licenses** are all the licenses granted to you for the software
-under these terms.
-
-**Use** means anything you do with the software requiring one of your
-licenses.
+Copyright (c) 2025-2026 zhaoyue (Charles146)
+联系作者 / Contact: 微信 WeChat 15828377122
 
 ================================================================
-中文摘要（仅供阅读便利，正式条款以上述英文为准）
+中文条款（CHINESE TERMS, AUTHORITATIVE）
 ================================================================
 
-本项目采用 **PolyForm Noncommercial 1.0.0** 许可证。
+本软件（"片刻 / pianke"，以下简称"本软件"）由作者免费向公众发布，
+任何人在同意以下条款的前提下可以获得使用权。
 
-**允许：**
-- 个人完全免费使用（包括学习、研究、爱好、私人选片）
-- 修改、二次开发、自用
-- 在保留本许可与署名的前提下，向他人非商业地分发
+## 一、允许的行为
 
-**禁止：**
-- 任何商业用途，包括但不限于：
-  * 把本软件作为付费服务的一部分提供给客户（例如代选片服务）
-  * 把本软件二次打包、改名、汉化后销售或赠予以换取商业利益
-  * 在企业内部用本软件处理客户付费交付物的生产流程
-  * 基于本软件的衍生作品作任何形式的商业分发
+1. **个人使用**：任何自然人可以免费下载、安装、使用本软件，用于私人
+   整理照片、学习、研究、爱好用途。
 
-**如需商业授权，请联系作者：微信 15828377122**
+2. **摄影师业务内部使用**：摄影师、摄影助理、摄影工作室、影像团队
+   可以在自己日常拍摄业务中使用本软件，**包括用于处理付费拍摄任务
+   交付给客户的照片**——本软件视为摄影工作的内部工具，不视为出售
+   软件本身。
+
+3. **修改与自用**：你可以自由阅读、修改本软件源码用于自己使用，
+   也可以为提交 Pull Request 而修改源码。
+
+4. **非营利分享**：在保留本许可证全文与版权声明的前提下，你可以
+   把本软件免费分享给朋友、同事、摄影社群、教学场合。
+
+## 二、禁止的行为
+
+1. **销售本软件**：无论原样、改名、汉化、换皮、二次打包，都禁止
+   以任何形式（一次性付费 / 订阅 / 内购 / 解锁 / 收取"激活码费"等）
+   出售本软件或其衍生作品。
+
+2. **作为付费服务对外提供软件能力**：禁止把本软件部署成网站、
+   小程序、云服务、API、桌面客户端等任何形态，向第三方提供"用本
+   软件处理照片"的付费功能（例如收费的在线选片网站、付费 SaaS、
+   付费的选片小程序）。
+   *注：摄影师收取的是"拍摄 + 选片服务费"——这种"卖摄影服务"
+   是被允许的（见上文第 1.2 条）。本条禁止的是"卖软件能力本身"。*
+
+3. **转售 / 转授权 / 再许可**：禁止把通过本许可证获得的权利转让、
+   许可、转售给任何第三方。
+
+4. **去除版权 / 商标 / 联系方式**：禁止移除、隐藏、篡改源码中、UI 中、
+   导出文件中或本许可证中的"片刻"品牌标识、版权声明、作者联系方式。
+
+5. **冒用品牌**：禁止使用"片刻 / pianke"商标或近似名称分发改版软件。
+
+## 三、关于"商业使用"的边界示例
+
+| 场景 | 是否允许 |
+| :--- | :--- |
+| 婚礼摄影师在工作电脑上装片刻，给付费拍摄的客户选片 | ✅ 允许 |
+| 个人摄影爱好者整理旅行照片 | ✅ 允许 |
+| 五人摄影工作室在内部 5 台电脑上装片刻日常使用 | ✅ 允许 |
+| 影楼对外宣传"我们用片刻为客户做 AI 选片" | ✅ 允许（鼓励署名） |
+| 自媒体写教程介绍片刻、放下载链接（不收费） | ✅ 允许 |
+| 把片刻打包成 .exe / .dmg 在某宝、闲鱼、抖音卖 | ❌ 禁止 |
+| 改个名字叫"XX 选片大师"上架 App Store / 微软商店收费 | ❌ 禁止 |
+| 搭一个网站让用户上传照片用片刻处理，按次 / 按月收费 | ❌ 禁止 |
+| 在公司内部基于片刻做改造，对外提供付费 SaaS | ❌ 禁止 |
+| 把片刻嵌入到自己的付费软件 / 付费课程作为卖点 | ❌ 禁止 |
+
+如果你的场景不确定，请联系作者澄清：**微信 15828377122**。
+
+## 四、违约处理
+
+第一次书面通知违约后，你需要在 32 天内停止违约行为并恢复合规；
+否则你按本协议获得的所有授权立即终止。
+
+## 五、无担保
+
+本软件按"现状"提供。作者在法律允许的最大范围内不对软件的可用性、
+适用性、无错误性承担任何担保责任。使用过程中产生的任何直接或间接
+损失由使用者自行承担。
+
+## 六、商业授权 / 二次开发授权
+
+如果你的使用场景超出"允许的行为"范围（例如你确实需要把本软件
+作为产品对外销售、提供付费服务、嵌入自己的商业产品），请联系
+作者协商单独的商业授权：
+
+  **微信 WeChat: 15828377122**
+
+作者保留向特定使用者授予额外权利的权利。
+
+================================================================
+ENGLISH SUMMARY (for reference; the Chinese text above prevails)
+================================================================
+
+This software ("pianke") is offered free of charge, subject to the
+following terms.
+
+**Permitted:**
+- Personal use by individuals (photo organization, study, hobby).
+- **Use by professional photographers and studios as an internal
+  tool in their photography business, INCLUDING the selection of
+  photos delivered to paying clients.** (The customer is paying for
+  photography services; the software is just a tool.)
+- Modification of source code for personal use or contribution.
+- Free redistribution that retains this license and credits.
+
+**Forbidden:**
+- Selling the software (original, modified, repackaged, or rebranded)
+  in any form (one-time, subscription, in-app purchase, activation
+  keys, etc.).
+- Offering the software's capabilities as a paid service to third
+  parties (paid SaaS, paid web app, paid mini-program, paid API).
+- Sublicensing, reselling, or transferring rights granted herein.
+- Removing or hiding the "pianke / 片刻" brand, copyright, or
+  contact information from the source, UI, or output.
+- Distributing modified versions under the "pianke / 片刻" name.
+
+**Commercial licensing** (if your use exceeds the above grants):
+WeChat: 15828377122
+
+**Warranty:** Software provided AS IS, without warranty of any kind.
+
+When in doubt about whether your use is allowed, contact the author
+on WeChat 15828377122 — clarifications are free.
