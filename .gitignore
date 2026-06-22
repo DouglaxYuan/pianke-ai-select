@@ -38,6 +38,7 @@ img/
 
 # 运行时缓存与状态
 .cache/
+workspace/
 models/
 state.json
 *.session.json

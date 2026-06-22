@@ -1,4 +1,5 @@
 import importlib
+import json
 import sys
 import types
 from pathlib import Path
@@ -204,3 +205,177 @@ def test_confirm_prescreen_groups_only_passed_and_restored_photos(tmp_path):
     assert bad_restore.path in tournament_images
     assert bad_drop.path not in tournament_images
     assert app.SESSION.prescreen_reviewed is True
+
+
+def _make_info_for_app(app, path: Path, score=80.0):
+    path.write_bytes(b"fake")
+    return app.ImageInfo(
+        path=str(path),
+        phash="0" * 16,
+        size=path.stat().st_size,
+        mtime=path.stat().st_mtime,
+        exif_summary={"width": 1000, "height": 800, "file_size": path.stat().st_size},
+        quality={"quality_score": score, "flags": []},
+    )
+
+
+def test_state_saved_under_workspace_not_photo_folder(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIC_SELECTER_WORKSPACE", str(tmp_path / "workspace"))
+    app = import_app_module()
+    photo_dir = tmp_path / "photos"
+    photo_dir.mkdir()
+    infos = [
+        _make_info_for_app(app, photo_dir / "a.jpg", score=80),
+        _make_info_for_app(app, photo_dir / "b.jpg", score=78),
+    ]
+
+    app.build_session_from_groups(
+        str(photo_dir),
+        dry_run=True,
+        mode="copy",
+        raw_groups=[infos],
+        infos=infos,
+        threshold_near=10,
+        threshold_far=6,
+        near_seconds=300,
+        prescreen_enabled=False,
+        prescreen_strength="standard",
+    )
+
+    state_file = app.state_path(str(photo_dir))
+    progress_file = app.progress_path(str(photo_dir))
+    assert state_file.exists()
+    assert progress_file.exists()
+    assert str(state_file).startswith(str(tmp_path / "workspace"))
+    assert not (photo_dir / app.STATE_FILENAME).exists()
+    assert not (photo_dir / app.PIC_DIR).exists()
+
+    progress = json.loads(progress_file.read_text(encoding="utf-8"))
+    assert progress["folder"] == str(photo_dir)
+    assert progress["total_groups"] == 1
+    assert progress["unfinished_groups"] == 1
+    assert progress["unfinished_group_details"][0]["pending_count"] == 0
+
+
+def test_resume_session_restores_workspace_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIC_SELECTER_WORKSPACE", str(tmp_path / "workspace"))
+    app = import_app_module()
+    photo_dir = tmp_path / "photos"
+    photo_dir.mkdir()
+    left = _make_info_for_app(app, photo_dir / "left.jpg", score=80)
+    right = _make_info_for_app(app, photo_dir / "right.jpg", score=78)
+    group = app.GroupState(images=[left.path, right.path], left=left.path, right=right.path)
+    sess = app.SessionState(
+        folder=str(photo_dir),
+        dry_run=True,
+        mode="copy",
+        engine="fast",
+        groups=[group],
+        prescreen_reviewed=True,
+        meta={left.path: {"quality_score": 80}, right.path: {"quality_score": 78}},
+    )
+    app.save_state(sess)
+    app.SESSION = None
+    app.LAST_INFOS = None
+    app.JOB = None
+    app.request.get_json = lambda *args, **kwargs: {"folder": str(photo_dir)}
+
+    payload = app.api_resume_session()
+
+    assert payload["ok"] is True
+    assert payload["resumed"] is True
+    assert app.SESSION is not None
+    assert app.SESSION.folder == str(photo_dir)
+    assert app.SESSION.groups[0].left == left.path
+    assert payload["summary"]["unfinished_groups"] == 1
+
+
+def test_load_state_migrates_legacy_photo_folder_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIC_SELECTER_WORKSPACE", str(tmp_path / "workspace"))
+    app = import_app_module()
+    photo_dir = tmp_path / "photos"
+    photo_dir.mkdir()
+    left = str(photo_dir / "legacy-left.jpg")
+    right = str(photo_dir / "legacy-right.jpg")
+    legacy_state = {
+        "schema": 6,
+        "folder": str(photo_dir),
+        "dry_run": True,
+        "mode": "copy",
+        "engine": "fast",
+        "current_group": 0,
+        "threshold_near": 10,
+        "threshold_far": 6,
+        "near_seconds": 300,
+        "prescreen_enabled": True,
+        "prescreen_strength": "standard",
+        "prescreen_reviewed": True,
+        "prescreen_rejected": [],
+        "prescreen_reject_reasons": {},
+        "prescreen_restored": [],
+        "companions": {},
+        "meta": {left: {"quality_score": 80}, right: {"quality_score": 78}},
+        "groups": [{
+            "images": [left, right],
+            "pending": [],
+            "left": left,
+            "right": right,
+            "losers": [],
+            "winner": None,
+            "extra_winners": [],
+            "finished": False,
+            "applied": False,
+        }],
+    }
+    (photo_dir / app.STATE_FILENAME).write_text(
+        json.dumps(legacy_state, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    loaded = app.load_state(str(photo_dir))
+
+    assert loaded is not None
+    assert loaded.groups[0].left == left
+    assert loaded.meta[left]["quality_score"] == 80
+    assert app.state_path(str(photo_dir)).exists()
+    assert str(app.state_path(str(photo_dir))).startswith(str(tmp_path / "workspace"))
+
+
+def test_saved_session_meta_and_delete_do_not_touch_photo_folder(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIC_SELECTER_WORKSPACE", str(tmp_path / "workspace"))
+    app = import_app_module()
+    photo_dir = tmp_path / "photos"
+    photo_dir.mkdir()
+    left = _make_info_for_app(app, photo_dir / "left.jpg", score=80)
+    right = _make_info_for_app(app, photo_dir / "right.jpg", score=78)
+    sess = app.SessionState(
+        folder=str(photo_dir),
+        dry_run=True,
+        mode="copy",
+        engine="fast",
+        groups=[app.GroupState(images=[left.path, right.path], left=left.path, right=right.path)],
+        prescreen_reviewed=True,
+    )
+    app.save_state(sess)
+
+    app.request.get_json = lambda *args, **kwargs: {
+        "folder": str(photo_dir),
+        "note": "鱼妹第一轮",
+        "archived": True,
+    }
+    updated = app.api_saved_session_meta()
+    assert updated["ok"] is True
+    summary = app.saved_progress_summary(str(photo_dir))
+    assert summary["note"] == "鱼妹第一轮"
+    assert summary["archived"] is True
+    assert not (photo_dir / "task_meta.json").exists()
+
+    task_dir = app.workspace_task_dir(str(photo_dir))
+    assert task_dir.exists()
+    app.request.get_json = lambda *args, **kwargs: {"folder": str(photo_dir)}
+    deleted = app.api_delete_saved_session()
+    assert deleted["ok"] is True
+    assert not task_dir.exists()
+    assert left.path and right.path
+    assert Path(left.path).exists()
+    assert Path(right.path).exists()

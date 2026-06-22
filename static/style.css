@@ -234,6 +234,133 @@ code {
   line-height: 1.6;
 }
 
+.saved-sessions {
+  max-width: 660px;
+  margin: -18px 0 22px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.saved-sessions.hidden { display: none; }
+.saved-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.saved-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.saved-session-list {
+  display: grid;
+  gap: 8px;
+}
+.saved-session {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+}
+.saved-session.is-archived {
+  opacity: 0.68;
+}
+.saved-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.saved-title {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.saved-sub {
+  color: var(--accent-deep);
+  font-size: 12px;
+}
+.saved-path {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.saved-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.saved-resume {
+  padding: 8px 14px;
+}
+.saved-actions svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+.saved-actions svg .icon-fill {
+  fill: currentColor;
+  stroke: none;
+}
+.saved-actions .icon-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+}
+.saved-actions .saved-delete:hover {
+  color: #9f352e;
+  border-color: color-mix(in srgb, #9f352e 45%, var(--line));
+  background: color-mix(in srgb, #9f352e 8%, transparent);
+}
+.saved-note {
+  grid-column: 1 / -1;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink-2);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+}
+.saved-note::placeholder {
+  color: var(--ink-faint);
+}
+
 /* 输入表单 */
 .start-form { max-width: 660px; }
 .field-label {
@@ -1098,6 +1225,30 @@ span.sc-item { color: var(--ink-faint); }
 }
 
 .auto-reject-section.hidden { display: none; }
+.prescreen-auto-head {
+  align-items: flex-start;
+  gap: 18px;
+}
+.prescreen-collapse-note {
+  margin: 7px 0 0;
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.prescreen-collapse-note:empty { display: none; }
+.prescreen-auto-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.prescreen-toggle-grid.hidden { display: none; }
+.prescreen-auto-grid-wrap.is-collapsed {
+  min-height: 0;
+}
+.prescreen-auto-grid-wrap.is-collapsed .auto-reject-grid {
+  display: none;
+}
 .auto-reject-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2138,6 +2289,31 @@ body:has(#view-done.active) .status-badge {
 .snap-samples img:nth-child(3) { animation-delay: 0.12s; }
 @keyframes snap-thumb {
   to { opacity: 1; transform: translateY(0); }
+}
+.snap-resume-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line-soft);
+}
+.snap-resume-actions.hidden { display: none; }
+.snap-resume-btn {
+  color: var(--accent-deep);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.snap-workspace {
+  min-width: 0;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .adv-deep {
   margin-top: 8px;

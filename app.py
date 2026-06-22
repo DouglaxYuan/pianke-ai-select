@@ -47,8 +47,11 @@ except Exception:
     pass
 
 
+APP_DIR = Path(__file__).resolve().parent
+WORKSPACE_ENV = "PIC_SELECTER_WORKSPACE"
+RETOUCH_WORKSPACE_ENV = "PIANKE_RETOUCH_WORKSPACE"
 STATE_FILENAME = ".pic_selecter_state.json"
-STATE_SCHEMA = 6
+STATE_SCHEMA = 7
 PIC_DIR = "_pic_selecter"
 THUMB_MAX = 1600
 
@@ -183,7 +186,33 @@ def losers_dir(folder: str) -> Path:
     return Path(folder) / "losers"
 
 
+def workspace_root() -> Path:
+    configured = os.environ.get(WORKSPACE_ENV)
+    return Path(configured).expanduser() if configured else APP_DIR / "workspace"
+
+
+def retouch_workspace() -> Path:
+    configured = os.environ.get(RETOUCH_WORKSPACE_ENV)
+    if configured:
+        return Path(configured).expanduser()
+    return Path("/Volumes/英睿达 P3/AI修图偏好学习/auto-retouch-pilot")
+
+
+def _folder_key(folder: str) -> str:
+    normalized = str(Path(folder).expanduser().resolve())
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:20]
+    return digest
+
+
+def workspace_task_dir(folder: str) -> Path:
+    return workspace_root() / "tasks" / _folder_key(folder)
+
+
 def pic_dir(folder: str) -> Path:
+    return workspace_task_dir(folder)
+
+
+def legacy_pic_dir(folder: str) -> Path:
     return Path(folder) / PIC_DIR
 
 
@@ -196,7 +225,27 @@ def skipped_log_path(folder: str) -> Path:
 
 
 def state_path(folder: str) -> Path:
+    return workspace_task_dir(folder) / STATE_FILENAME
+
+
+def legacy_state_path(folder: str) -> Path:
     return Path(folder) / STATE_FILENAME
+
+
+def progress_path(folder: str) -> Path:
+    return workspace_task_dir(folder) / "progress.json"
+
+
+def manifest_path(folder: str) -> Path:
+    return workspace_task_dir(folder) / "manifest.json"
+
+
+def task_meta_path(folder: str) -> Path:
+    return workspace_task_dir(folder) / "task_meta.json"
+
+
+def state_exists(folder: str) -> bool:
+    return state_path(folder).exists() or legacy_state_path(folder).exists()
 
 
 logger = logging.getLogger("pic_selecter")
@@ -259,7 +308,7 @@ def setup_logger(folder: Optional[str]) -> None:
     if folder:
         try:
             d = pic_dir(folder)
-            d.mkdir(exist_ok=True)
+            d.mkdir(parents=True, exist_ok=True)
             fh = RotatingFileHandler(d / "log.txt", maxBytes=2_000_000, backupCount=2,
                                      encoding="utf-8")
             fh.setFormatter(logging.Formatter(
@@ -273,7 +322,7 @@ def setup_logger(folder: Optional[str]) -> None:
 #
 # 共享 log.txt 跨任务追加，时间一长很难找"这一次跑"的范围。
 # 这个 JobLogger 在 /api/start 启动一个新文件，处理完追加 summary 行后关闭。
-# 文件名：<folder>/_pic_selecter/jobs/<YYYYMMDD-HHMMSS>-<engine>.log
+# 文件名：<pianke>/workspace/tasks/<folder-key>/jobs/<YYYYMMDD-HHMMSS>-<engine>.log
 # 路径暴露给 UI 让用户能在 done 页面下载这个文件。
 
 JOB_LOG: Optional["JobLogger"] = None
@@ -439,6 +488,217 @@ def _close_job_log() -> None:
 
 # ---------------- State 持久化 + 迁移 ----------------
 
+def _json_safe(value):
+    """把 numpy 标量、Path、set 等运行时对象转成可写入 JSON 的基础类型。"""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    if hasattr(value, "item"):
+        try:
+            return _json_safe(value.item())
+        except Exception:
+            pass
+    return str(value)
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(_json_safe(data), ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _load_task_meta(folder: str) -> dict:
+    p = task_meta_path(folder)
+    if not p.exists():
+        return {"note": "", "archived": False}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return {
+            "note": str(data.get("note", ""))[:500],
+            "archived": bool(data.get("archived", False)),
+            "updated_at": data.get("updated_at"),
+        }
+    except Exception:
+        return {"note": "", "archived": False}
+
+
+def _save_task_meta(folder: str, *, note: Optional[str] = None,
+                    archived: Optional[bool] = None) -> dict:
+    meta = _load_task_meta(folder)
+    if note is not None:
+        meta["note"] = str(note).strip()[:500]
+    if archived is not None:
+        meta["archived"] = bool(archived)
+    meta["updated_at"] = time.time()
+    _atomic_write_json(task_meta_path(folder), meta)
+    summary = saved_progress_summary(folder)
+    if summary:
+        summary.update({
+            "note": meta.get("note", ""),
+            "archived": bool(meta.get("archived", False)),
+        })
+        _atomic_write_json(manifest_path(folder), summary)
+    return meta
+
+
+def _session_progress_summary(state: SessionState, include_lists: bool = False) -> dict:
+    finished = sum(1 for g in state.groups if g.finished)
+    winners = sum((1 if g.winner else 0) + len(g.extra_winners) for g in state.groups)
+    losers = sum(len(g.losers) for g in state.groups)
+    image_count = sum(len(g.images) for g in state.groups)
+    if image_count == 0:
+        image_count = len(state.meta) or len(state.prescreen_rejected)
+    auto_rejected = (
+        len(state.prescreen_rejected) or
+        sum(len(g.auto_rejected) for g in state.groups)
+    )
+    auto_restored = (
+        len(state.prescreen_restored) or
+        sum(len(g.manual_restored) for g in state.groups)
+    )
+    multi = sum(1 for g in state.groups if len(g.images) > 1)
+    finished_multi = sum(1 for g in state.groups if g.finished and len(g.images) > 1)
+    selection_started = (
+        state.current_group > 0 or
+        any(g.finished and len(g.images) > 1 and not g.auto_selected for g in state.groups)
+    )
+    is_finished = bool(state.groups) and finished >= len(state.groups) and state.prescreen_reviewed
+    if not state.prescreen_reviewed and state.prescreen_rejected:
+        phase = "prescreen"
+    elif is_finished:
+        phase = "finished"
+    else:
+        phase = "selection"
+
+    updated_at = time.time()
+    meta = _load_task_meta(state.folder)
+    summary = {
+        "schema": STATE_SCHEMA,
+        "folder": state.folder,
+        "folder_name": Path(state.folder).name,
+        "workspace_dir": str(workspace_task_dir(state.folder)),
+        "state_path": str(state_path(state.folder)),
+        "progress_path": str(progress_path(state.folder)),
+        "updated_at": updated_at,
+        "updated_at_text": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(updated_at)),
+        "dry_run": state.dry_run,
+        "mode": state.mode,
+        "engine": state.engine,
+        "runtime": state.runtime,
+        "phase": phase,
+        "can_resume": True,
+        "is_finished": is_finished,
+        "selection_started": selection_started,
+        "image_count": image_count,
+        "total_groups": len(state.groups),
+        "multi_groups": multi,
+        "finished_groups": finished,
+        "finished_multi_groups": finished_multi,
+        "unfinished_groups": max(0, len(state.groups) - finished),
+        "current_group": state.current_group,
+        "winner_count": winners,
+        "loser_count": losers,
+        "prescreen_enabled": state.prescreen_enabled,
+        "prescreen_strength": state.prescreen_strength,
+        "prescreen_reviewed": state.prescreen_reviewed,
+        "prescreen_auto_rejected_count": auto_rejected,
+        "prescreen_restored_count": auto_restored,
+        "prescreen_pending_count": max(0, auto_rejected - auto_restored),
+        "note": meta.get("note", ""),
+        "archived": bool(meta.get("archived", False)),
+    }
+
+    if not include_lists:
+        return summary
+
+    suggested: list[dict] = []
+    discarded: list[dict] = []
+    kept: list[dict] = []
+    unfinished_groups: list[dict] = []
+    seen_suggested: set[str] = set()
+    seen_discarded: set[str] = set()
+    seen_kept: set[str] = set()
+
+    def add_path(rows: list[dict], seen: set[str], path: str, **extra) -> None:
+        if not path or path in seen:
+            return
+        seen.add(path)
+        rows.append({
+            "path": path,
+            "name": Path(path).name,
+            **extra,
+        })
+
+    restored_pre = set(state.prescreen_restored)
+    for path in state.prescreen_rejected:
+        status = "restored" if path in restored_pre else ("dropped" if state.prescreen_reviewed else "pending_review")
+        reason = state.prescreen_reject_reasons.get(path, "智能初筛")
+        add_path(suggested, seen_suggested, path, group_id="__prescreen__", reason=reason, status=status)
+        if status == "dropped":
+            add_path(discarded, seen_discarded, path, group_id="__prescreen__", reason=reason, source="prescreen")
+
+    for idx, group in enumerate(state.groups):
+        for path in group.losers:
+            reason = (
+                group.auto_reject_reasons.get(path) or
+                state.prescreen_reject_reasons.get(path) or
+                ("智能初筛" if path in group.auto_rejected else "用户放手")
+            )
+            add_path(discarded, seen_discarded, path, group_index=idx, group_id=group.id,
+                     reason=reason, source="group")
+        for path in group.auto_rejected:
+            reason = group.auto_reject_reasons.get(path, "智能初筛")
+            status = "restored" if path in group.manual_restored else "dropped"
+            add_path(suggested, seen_suggested, path, group_index=idx, group_id=group.id,
+                     reason=reason, status=status)
+        for path in ([group.winner] if group.winner else []) + list(group.extra_winners):
+            add_path(kept, seen_kept, path, group_index=idx, group_id=group.id,
+                     source="winner")
+        if not group.finished:
+            unfinished_groups.append({
+                "index": idx,
+                "group_id": group.id,
+                "image_count": len(group.images),
+                "left": group.left,
+                "right": group.right,
+                "pending_count": len(group.pending),
+                "pending": list(group.pending),
+                "decided_losers": list(group.losers),
+                "extra_winners": list(group.extra_winners),
+            })
+
+    summary.update({
+        "suggested_drop_photos": suggested,
+        "discarded_photos": discarded,
+        "kept_photos": kept,
+        "unfinished_group_details": unfinished_groups,
+    })
+    return summary
+
+
+def saved_progress_summary(folder: str) -> Optional[dict]:
+    for p in (manifest_path(folder), progress_path(folder)):
+        if not p.exists():
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                meta = _load_task_meta(folder)
+                data.setdefault("note", meta.get("note", ""))
+                data.setdefault("archived", bool(meta.get("archived", False)))
+                return data
+        except Exception:
+            pass
+    sess = load_state(folder)
+    return _session_progress_summary(sess, include_lists=False) if sess else None
+
+
 def save_state(state: SessionState) -> None:
     data = {
         "schema": STATE_SCHEMA,
@@ -446,6 +706,7 @@ def save_state(state: SessionState) -> None:
         "dry_run": state.dry_run,
         "mode": state.mode,
         "engine": state.engine,
+        "runtime": state.runtime,
         "current_group": state.current_group,
         "threshold_near": state.threshold_near,
         "threshold_far": state.threshold_far,
@@ -457,12 +718,19 @@ def save_state(state: SessionState) -> None:
         "prescreen_reject_reasons": state.prescreen_reject_reasons,
         "prescreen_restored": state.prescreen_restored,
         "companions": state.companions,
+        "meta": state.meta,
+        "pref_decisions": state.pref_decisions,
+        "pref_aesthetic_chosen": state.pref_aesthetic_chosen,
+        "pref_aesthetic_passed": state.pref_aesthetic_passed,
+        "pref_sharper_chosen": state.pref_sharper_chosen,
+        "pref_sharper_passed": state.pref_sharper_passed,
+        "pref_brighter_chosen": state.pref_brighter_chosen,
+        "pref_brighter_passed": state.pref_brighter_passed,
         "groups": [asdict(g) for g in state.groups],
     }
-    p = state_path(state.folder)
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
-    tmp.replace(p)
+    _atomic_write_json(state_path(state.folder), data)
+    _atomic_write_json(progress_path(state.folder), _session_progress_summary(state, include_lists=True))
+    _atomic_write_json(manifest_path(state.folder), _session_progress_summary(state, include_lists=False))
 
 
 def _migrate_state(data: dict) -> dict:
@@ -491,6 +759,19 @@ def _migrate_state(data: dict) -> dict:
         # v5 → v6: 加 RAW+JPG 配对支持
         data.setdefault("companions", {})
         data["schema"] = 6
+        schema = 6
+    if schema == 6:
+        # v6 → v7: 工作区恢复增强，补 meta / runtime / 偏好计数。
+        data.setdefault("runtime", "auto")
+        data.setdefault("meta", {})
+        data.setdefault("pref_decisions", 0)
+        data.setdefault("pref_aesthetic_chosen", 0.0)
+        data.setdefault("pref_aesthetic_passed", 0.0)
+        data.setdefault("pref_sharper_chosen", 0.0)
+        data.setdefault("pref_sharper_passed", 0.0)
+        data.setdefault("pref_brighter_chosen", 0.0)
+        data.setdefault("pref_brighter_passed", 0.0)
+        data["schema"] = 7
         return data
     raise ValueError(
         f"state schema {schema} 太旧（仅支持 v4+）。"
@@ -501,7 +782,11 @@ def _migrate_state(data: dict) -> dict:
 def load_state(folder: str) -> Optional[SessionState]:
     p = state_path(folder)
     if not p.exists():
-        return None
+        legacy = legacy_state_path(folder)
+        if legacy.exists():
+            p = legacy
+        else:
+            return None
     try:
         data = json.loads(p.read_text())
         data = _migrate_state(data)
@@ -511,6 +796,7 @@ def load_state(folder: str) -> Optional[SessionState]:
             dry_run=data.get("dry_run", False),
             mode=data.get("mode", "copy"),
             engine=data.get("engine", "expert"),
+            runtime=data.get("runtime", "auto"),
             groups=groups,
             current_group=data.get("current_group", 0),
             threshold_near=data.get("threshold_near", THRESHOLD_NEAR),
@@ -523,9 +809,18 @@ def load_state(folder: str) -> Optional[SessionState]:
             prescreen_reject_reasons=data.get("prescreen_reject_reasons", {}),
             prescreen_restored=data.get("prescreen_restored", []),
             undo_stack=[],
-            meta={},
+            meta=data.get("meta", {}),
+            pref_decisions=data.get("pref_decisions", 0),
+            pref_aesthetic_chosen=data.get("pref_aesthetic_chosen", 0.0),
+            pref_aesthetic_passed=data.get("pref_aesthetic_passed", 0.0),
+            pref_sharper_chosen=data.get("pref_sharper_chosen", 0.0),
+            pref_sharper_passed=data.get("pref_sharper_passed", 0.0),
+            pref_brighter_chosen=data.get("pref_brighter_chosen", 0.0),
+            pref_brighter_passed=data.get("pref_brighter_passed", 0.0),
             companions=data.get("companions", {}),
         )
+        if p != state_path(folder) or data.get("schema") != STATE_SCHEMA:
+            save_state(sess)
         return sess
     except Exception as e:
         logger.exception(f"读取状态失败: {e}")
@@ -1842,7 +2137,7 @@ def _record_skipped(folder: str, items: list[tuple[str, str]]) -> None:
         return
     try:
         d = pic_dir(folder)
-        d.mkdir(exist_ok=True)
+        d.mkdir(parents=True, exist_ok=True)
         with open(skipped_log_path(folder), "a", encoding="utf-8") as f:
             for p, reason in items:
                 f.write(f"{int(time.time())}\t{p}\t{reason}\n")
@@ -1855,13 +2150,18 @@ def _wipe_caches(folder: str) -> None:
 
     - copy 模式：winners/ losers/ 是副本，原图还在根目录 → 直接删 winners/ losers/。
     - move 模式：winners/ losers/ 里就是原图本体 → 把文件搬回根目录再删空目录。
-    - 同时清掉 phash 缓存、session 进度、_pic_selecter/（日志/缩略图/skipped）。
+    - 同时清掉本任务在 Pianke workspace 里的 session 进度、日志、缩略图。
+    - 兼容清理旧版本写到照片目录的 .pic_selecter_state.json / _pic_selecter/。
     """
     # 先读上次的 mode（在删 state 之前），决定 winners/losers 怎么处理。
     # 读不到时默认按 move 处理（先把文件搬回根目录再删空）—— 这样即使原本是
     # copy 模式也只是产生重名副本，不会丢图；反过来按 copy 误删就是真丢数据。
     prev_mode = "move"
     sp = state_path(folder)
+    if not sp.exists():
+        legacy_sp = legacy_state_path(folder)
+        if legacy_sp.exists():
+            sp = legacy_sp
     if sp.exists():
         try:
             data = json.loads(sp.read_text())
@@ -1890,19 +2190,25 @@ def _wipe_caches(folder: str) -> None:
         except OSError as e:
             logger.warning(f"删 {sub}/ 失败: {e}")
 
-    # 清 state.json
-    try:
-        if sp.exists():
-            sp.unlink()
-    except OSError as e:
-        logger.warning(f"清 state.json 失败 {sp}: {e}")
-
-    pd = pic_dir(folder)
-    if pd.exists():
+    # 清当前 workspace 任务目录
+    task_dir = workspace_task_dir(folder)
+    if task_dir.exists():
         try:
-            shutil.rmtree(pd)
+            shutil.rmtree(task_dir)
         except OSError as e:
-            logger.warning(f"清 _pic_selecter 目录失败: {e}")
+            logger.warning(f"清 Pianke workspace 任务目录失败 {task_dir}: {e}")
+
+    # 清旧版本留在照片目录里的运行时文件；不碰原片。
+    for old_path in (legacy_state_path(folder), legacy_pic_dir(folder)):
+        if not old_path.exists():
+            continue
+        try:
+            if old_path.is_dir():
+                shutil.rmtree(old_path)
+            else:
+                old_path.unlink()
+        except OSError as e:
+            logger.warning(f"清旧版状态失败 {old_path}: {e}")
 
 
 def _require_engine(engine: str) -> None:
@@ -2025,6 +2331,8 @@ def _run_job(folder: str, dry_run: bool, mode: str, wipe_cache: bool,
                 threshold_near, threshold_far, near_seconds,
                 prescreen_enabled, prescreen_strength, engine=engine,
             )
+            sess.runtime = _normalize_runtime(os.environ.get("PIC_SELECTER_RUNTIME"))
+            save_state(sess)
             if _cancel_check() or job.status == "cancelled":
                 raise CancelledError()
             with LOCK:
@@ -2319,6 +2627,127 @@ def api_start():
     return jsonify({"ok": True})
 
 
+@app.route("/api/resume_session", methods=["POST"])
+def api_resume_session():
+    """从 Pianke workspace 恢复某个照片文件夹的上次进度。"""
+    global SESSION, LAST_INFOS
+    data = request.get_json(force=True) or {}
+    folder = (data.get("folder") or "").strip()
+    if not folder:
+        return jsonify({"error": "请填写文件夹路径"}), 400
+    folder = str(Path(folder).expanduser().resolve())
+    if not Path(folder).is_dir():
+        return jsonify({"error": f"目录不存在: {folder}"}), 400
+    if JOB and JOB.status in ("pending", "scanning", "hashing", "grouping", "checking"):
+        return jsonify({"error": "已有任务在跑，请稍候"}), 409
+
+    sess = load_state(folder)
+    if sess is None:
+        return jsonify({"error": "没有找到可恢复的进度"}), 404
+
+    with LOCK:
+        _apply_runtime_selection(sess.runtime)
+        setup_logger(folder)
+        apply_pending_groups(sess)
+        SESSION = sess
+        LAST_INFOS = None
+        save_state(sess)
+    return jsonify({"ok": True, "resumed": True, "summary": _session_progress_summary(sess)})
+
+
+@app.route("/api/saved_sessions")
+def api_saved_sessions():
+    """列出 Pianke workspace 里可恢复的最近任务。"""
+    try:
+        limit = int(request.args.get("limit", "8"))
+    except ValueError:
+        limit = 8
+    limit = max(1, min(limit, 50))
+    include_archived = request.args.get("include_archived") in ("1", "true", "yes")
+
+    root = workspace_root() / "tasks"
+    sessions: list[dict] = []
+    if root.exists():
+        for manifest in root.glob("*/manifest.json"):
+            try:
+                data = json.loads(manifest.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            folder = data.get("folder")
+            if not folder or not Path(folder).exists():
+                continue
+            if not (manifest.parent / STATE_FILENAME).exists():
+                continue
+            data["workspace_dir"] = data.get("workspace_dir") or str(manifest.parent)
+            meta = _load_task_meta(folder)
+            data["note"] = meta.get("note", data.get("note", ""))
+            data["archived"] = bool(meta.get("archived", data.get("archived", False)))
+            if data["archived"] and not include_archived:
+                continue
+            sessions.append(data)
+
+    sessions.sort(key=lambda item: float(item.get("updated_at") or 0), reverse=True)
+    return jsonify({"sessions": sessions[:limit]})
+
+
+@app.route("/api/saved_session_meta", methods=["POST"])
+def api_saved_session_meta():
+    data = request.get_json(force=True) or {}
+    folder_raw = (data.get("folder") or "").strip()
+    if not folder_raw:
+        return jsonify({"error": "缺少 folder"}), 400
+    folder = str(Path(folder_raw).expanduser().resolve())
+    if not state_exists(folder):
+        return jsonify({"error": "没有找到这个任务"}), 404
+    meta = _save_task_meta(
+        folder,
+        note=data.get("note") if "note" in data else None,
+        archived=bool(data.get("archived")) if "archived" in data else None,
+    )
+    return jsonify({"ok": True, "meta": meta, "summary": saved_progress_summary(folder)})
+
+
+@app.route("/api/delete_saved_session", methods=["POST"])
+def api_delete_saved_session():
+    data = request.get_json(force=True) or {}
+    folder_raw = (data.get("folder") or "").strip()
+    if not folder_raw:
+        return jsonify({"error": "缺少 folder"}), 400
+    folder = str(Path(folder_raw).expanduser().resolve())
+    task_dir = workspace_task_dir(folder)
+    if task_dir.exists():
+        shutil.rmtree(task_dir)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/open_saved_session", methods=["POST"])
+def api_open_saved_session():
+    data = request.get_json(force=True) or {}
+    folder_raw = (data.get("folder") or "").strip()
+    target_name = data.get("target", "workspace")
+    if not folder_raw:
+        return jsonify({"error": "缺少 folder"}), 400
+    folder = str(Path(folder_raw).expanduser().resolve())
+    if target_name == "progress":
+        target = progress_path(folder)
+    elif target_name == "photo":
+        target = Path(folder)
+    else:
+        target = workspace_task_dir(folder)
+    if not target.exists():
+        return jsonify({"error": "目标不存在"}), 404
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(target)])
+        elif sys.platform == "win32":
+            os.startfile(str(target))  # type: ignore
+        else:
+            subprocess.Popen(["xdg-open", str(target)])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"ok": True, "target": str(target)})
+
+
 @app.route("/api/reset_session", methods=["POST"])
 def api_reset_session():
     """完全重置：中止运行中的任务、清空 SESSION/LAST_INFOS。
@@ -2416,6 +2845,12 @@ def api_status():
     finished_multi = sum(1 for g in SESSION.groups
                          if g.finished and len(g.images) > 1)
     unfinished = len(SESSION.groups) - finished
+    remaining_rounds = 0
+    for g in SESSION.groups:
+        if g.finished or len(g.images) <= 1:
+            continue
+        remaining_in_group = (1 if g.left else 0) + (1 if g.right else 0) + len(g.pending)
+        remaining_rounds += max(1, remaining_in_group - 1)
     selection_started = (
         SESSION.current_group > 0 or
         any(g.finished and len(g.images) > 1 and not g.auto_selected for g in SESSION.groups)
@@ -2423,9 +2858,12 @@ def api_status():
     return jsonify({
         "ready": True,
         "folder": SESSION.folder,
+        "workspace_dir": str(workspace_task_dir(SESSION.folder)),
+        "progress_path": str(progress_path(SESSION.folder)),
         "dry_run": SESSION.dry_run,
         "mode": SESSION.mode,
         "engine": SESSION.engine,
+        "runtime": SESSION.runtime,
         "total_groups": len(SESSION.groups),
         "image_count": image_count,
         "multi_groups": multi,
@@ -2437,6 +2875,7 @@ def api_status():
         "loser_count": losers,
         "current_group": SESSION.current_group,
         "unfinished_groups": unfinished,
+        "remaining_rounds_estimate": remaining_rounds,
         "threshold_near": SESSION.threshold_near,
         "threshold_far": SESSION.threshold_far,
         "near_seconds": SESSION.near_seconds,
@@ -3487,7 +3926,8 @@ def api_peek_folder():
     if earliest and latest and latest > earliest:
         span_days = max(1, int((latest - earliest) / 86400) + 1)
 
-    has_prior = (p / "winners").is_dir() or (p / "losers").is_dir() or state_path(folder).exists()
+    resume_summary = saved_progress_summary(folder)
+    has_prior = (p / "winners").is_dir() or (p / "losers").is_dir() or state_exists(folder)
 
     return jsonify({
         "ok": True,
@@ -3499,12 +3939,13 @@ def api_peek_folder():
         "active_period": _half_day_label(),
         "samples": samples_landscape[:3],
         "has_prior": has_prior,
+        "resume": resume_summary,
     })
 
 
 @app.route("/api/open_folder", methods=["POST"])
 def api_open_folder():
-    """跨平台打开 folder 或 _pic_selecter 子目录。"""
+    """跨平台打开照片文件夹或 Pianke workspace 任务目录。"""
     if SESSION is None:
         return jsonify({"error": "no session"}), 400
     data = request.get_json(silent=True) or {}
@@ -3566,6 +4007,46 @@ def _winner_paths() -> list[str]:
             if Path(actual).exists():
                 paths.append(actual)
     return paths
+
+
+@app.route("/api/retouch_handoff", methods=["POST"])
+def api_retouch_handoff():
+    """把 winners 写成自动修图流程的交接清单，不直接处理或上传照片。"""
+    if SESSION is None:
+        return jsonify({"error": "no session"}), 400
+    winners = _winner_paths()
+    if not winners:
+        return jsonify({"error": "没有 winner 照片可交接"}), 400
+    root = retouch_workspace()
+    tasks_dir = root / "tasks"
+    try:
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return jsonify({"error": f"无法创建修图任务目录: {e}"}), 500
+
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    out = tasks_dir / f"pianke_handoff_{stamp}.json"
+    payload = {
+        "schema": 1,
+        "created_at": time.time(),
+        "created_at_text": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "source": "pianke",
+        "source_folder": SESSION.folder,
+        "progress_path": str(progress_path(SESSION.folder)),
+        "style_mode": "auto_match",
+        "retouch_notes": "由后续自动修图流程匹配写真/人像/cos等风格，默认保留主体并做商业级皮肤与面部线条优化。",
+        "images": [{"path": p, "name": Path(p).name} for p in winners],
+    }
+    try:
+        _atomic_write_json(out, payload)
+    except OSError as e:
+        return jsonify({"error": f"写入修图任务失败: {e}"}), 500
+    return jsonify({
+        "ok": True,
+        "count": len(winners),
+        "task_path": str(out),
+        "workspace": str(root),
+    })
 
 
 @app.route("/api/watermark/templates")

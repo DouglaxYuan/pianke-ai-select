@@ -16,6 +16,7 @@ let currentGroup = null;
 let currentMode = "move";
 let recentWinners = []; // 最近胜出路径，给 arena-stack 用
 let streamSeq = 0;       // streaming log 已渲染到的 event_seq
+let showArchivedSessions = false;
 
 // ---- 处理页照片墙 ----
 let wallCells = [];          // [{el, ev, addedAt}]
@@ -182,7 +183,7 @@ async function goHome() {
   if (!onLanding) {
     const ok = await confirmDialog(
       "回到主页？",
-      "当前任务会被取消，已选文件夹和未保存进度会清空。\n（winners/ losers/ 文件夹里已搬过去的图片不会动）"
+      "当前页面会退出，已保存的选片进度会留在 Pianke 工作区，下次可从同一照片文件夹继续。\n（winners/ losers/ 文件夹里已搬过去的图片不会动）"
     );
     if (!ok) return;
   }
@@ -228,6 +229,7 @@ function pushRecent(path) {
 function renderRecent() {
   const wrap = $("recent-folders");
   const rs = loadRecent();
+  if (!wrap) return;
   wrap.innerHTML = "";
   if (!rs.length) return;
   for (const p of rs) {
@@ -241,6 +243,180 @@ function renderRecent() {
       requestFolderPeek(p);
     });
     wrap.appendChild(chip);
+  }
+}
+
+function savedSessionLine(s) {
+  if (!s) return "";
+  const mode = s.mode === "move" ? "移动" : "复制";
+  if (s.phase === "prescreen") {
+    const pending = s.prescreen_pending_count || s.prescreen_auto_rejected_count || 0;
+    return `初筛复核 · ${pending.toLocaleString()} 张建议放手 · ${mode}`;
+  }
+  if (s.phase === "finished") {
+    return `已完成 · 留下 ${(s.winner_count || 0).toLocaleString()} 张 · 放手 ${(s.loser_count || 0).toLocaleString()} 张 · ${mode}`;
+  }
+  const done = s.finished_groups || 0;
+  const total = s.total_groups || 0;
+  const unfinished = s.unfinished_groups || Math.max(0, total - done);
+  return `选片中 · ${done.toLocaleString()} / ${total.toLocaleString()} 组 · 未完成 ${unfinished.toLocaleString()} 组 · ${mode}`;
+}
+
+function mergeSavedSessions(primary, secondary) {
+  const seen = new Set();
+  const out = [];
+  for (const item of [...primary, ...secondary]) {
+    if (!item?.folder || seen.has(item.folder)) continue;
+    seen.add(item.folder);
+    out.push(item);
+  }
+  out.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+  return out;
+}
+
+function savedIcon(name) {
+  const icons = {
+    play: `<svg viewBox="0 0 24 24" aria-hidden="true"><path class="icon-fill" d="M8 5v14l11-7-11-7Z"/></svg>`,
+    open: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M9 9h6M9 13h6"/></svg>`,
+    file: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v5h4M10 12h5M10 16h5"/></svg>`,
+    archive: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v4H4z"/><path d="M6 10h12v9H6z"/><path d="M10 14h4"/></svg>`,
+    unarchive: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v4H4z"/><path d="M6 10h12v9H6z"/><path d="M12 17V12M9 15l3-3 3 3"/></svg>`,
+    trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14"/><path d="M10 7V5h4v2"/><path d="M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/></svg>`,
+  };
+  return icons[name] || "";
+}
+
+function renderSavedSessions(items) {
+  const box = $("saved-sessions");
+  const list = $("saved-session-list");
+  if (!box || !list) return;
+  list.innerHTML = "";
+  box.classList.toggle("hidden", !items.length);
+  for (const item of items.slice(0, 5)) {
+    const row = document.createElement("div");
+    row.className = "saved-session" + (item.archived ? " is-archived" : "");
+    const resumeLabel = item.phase === "finished" ? "查看" : "继续";
+    const archiveLabel = item.archived ? "取消归档" : "归档";
+    row.innerHTML = `
+      <button type="button" class="saved-main" title="${escapeHtml(item.folder || "")}">
+        <span class="saved-title">${escapeHtml(item.folder_name || basename(item.folder) || "未命名任务")}</span>
+        <span class="saved-sub">${escapeHtml(savedSessionLine(item))}</span>
+        <span class="saved-path">${escapeHtml(shortenHome(item.folder || ""))}</span>
+      </button>
+      <div class="saved-actions">
+        <button type="button" class="btn btn-primary small saved-resume" title="${resumeLabel}这个任务" aria-label="${resumeLabel}这个任务">
+          ${savedIcon(item.phase === "finished" ? "open" : "play")}
+          <span>${resumeLabel}</span>
+        </button>
+        <button type="button" class="btn-ghost btn-small icon-btn saved-open" title="打开进度文件" aria-label="打开进度文件">${savedIcon("file")}</button>
+        <button type="button" class="btn-ghost btn-small icon-btn saved-archive" title="${archiveLabel}" aria-label="${archiveLabel}">${savedIcon(item.archived ? "unarchive" : "archive")}</button>
+        <button type="button" class="btn-ghost btn-small icon-btn saved-delete" title="删除任务记录" aria-label="删除任务记录">${savedIcon("trash")}</button>
+      </div>
+      <input class="saved-note" type="text" value="${escapeHtml(item.note || "")}" placeholder="备注，例如：鱼妹中心公园第一轮" maxlength="500">`;
+    row.querySelector(".saved-main").addEventListener("click", () => {
+      $("folder-input").value = item.folder;
+      requestFolderPeek(item.folder);
+      $("folder-input").focus();
+    });
+    row.querySelector(".saved-resume").addEventListener("click", (e) => {
+      resumeSession(item.folder, e.currentTarget);
+    });
+    row.querySelector(".saved-open").addEventListener("click", () => openSavedSessionProgress(item.folder));
+    row.querySelector(".saved-archive").addEventListener("click", () => archiveSavedSession(item.folder, !item.archived));
+    row.querySelector(".saved-delete").addEventListener("click", () => deleteSavedSession(item.folder, item.folder_name || basename(item.folder)));
+    row.querySelector(".saved-note").addEventListener("change", (e) => {
+      updateSavedSessionNote(item.folder, e.target.value);
+    });
+    list.appendChild(row);
+  }
+}
+
+async function loadSavedSessions() {
+  let workspaceSessions = [];
+  try {
+    const qs = showArchivedSessions ? "?limit=12&include_archived=1" : "?limit=8";
+    const data = await fetchJSON("/api/saved_sessions" + qs);
+    workspaceSessions = data.sessions || [];
+  } catch {}
+
+  const recentFolders = loadRecent().slice(0, 5);
+  const recentSessions = [];
+  await Promise.all(recentFolders.map(async (folder) => {
+    try {
+      const data = await fetchJSON("/api/peek_folder", {
+        method: "POST",
+        body: JSON.stringify({ folder }),
+      });
+      if (data.resume?.can_resume) {
+        const resume = { ...data.resume, folder: data.resume.folder || folder };
+        if (showArchivedSessions || !resume.archived) recentSessions.push(resume);
+      }
+    } catch {}
+  }));
+
+  renderSavedSessions(mergeSavedSessions(workspaceSessions, recentSessions));
+  const toggle = $("saved-archived-toggle");
+  if (toggle) toggle.textContent = showArchivedSessions ? "隐藏归档" : "显示归档";
+}
+
+$("saved-refresh")?.addEventListener("click", loadSavedSessions);
+$("saved-archived-toggle")?.addEventListener("click", () => {
+  showArchivedSessions = !showArchivedSessions;
+  loadSavedSessions();
+});
+
+async function updateSavedSessionNote(folder, note) {
+  try {
+    await fetchJSON("/api/saved_session_meta", {
+      method: "POST",
+      body: JSON.stringify({ folder, note }),
+    });
+    toast("备注已保存");
+    loadSavedSessions();
+  } catch (e) {
+    toast("保存备注失败：" + e.message);
+  }
+}
+
+async function archiveSavedSession(folder, archived) {
+  try {
+    await fetchJSON("/api/saved_session_meta", {
+      method: "POST",
+      body: JSON.stringify({ folder, archived }),
+    });
+    toast(archived ? "已归档" : "已取消归档");
+    loadSavedSessions();
+  } catch (e) {
+    toast("归档失败：" + e.message);
+  }
+}
+
+async function deleteSavedSession(folder, name) {
+  const ok = await confirmDialog(
+    "删除任务记录？",
+    `只删除 Pianke 工作区里的任务记录，不会删除照片、winners/ 或 losers/。\n\n${name || folder}`
+  );
+  if (!ok) return;
+  try {
+    await fetchJSON("/api/delete_saved_session", {
+      method: "POST",
+      body: JSON.stringify({ folder }),
+    });
+    toast("任务记录已删除");
+    loadSavedSessions();
+  } catch (e) {
+    toast("删除失败：" + e.message);
+  }
+}
+
+async function openSavedSessionProgress(folder) {
+  try {
+    await fetchJSON("/api/open_saved_session", {
+      method: "POST",
+      body: JSON.stringify({ folder, target: "progress" }),
+    });
+  } catch (e) {
+    toast("打开进度失败：" + e.message);
   }
 }
 
@@ -529,10 +705,51 @@ restoreRuntimeChoice();
 // ---------- 文件夹快照（路径选好的瞬间触发） ----------
 let peekTimer = null;
 let peekToken = 0;
+let lastFolderPeek = null;
+let lastPeekFolder = "";
+
+function resumeSummaryText(resume) {
+  if (!resume || !resume.can_resume) return "";
+  if (resume.phase === "prescreen") {
+    const pending = resume.prescreen_pending_count || resume.prescreen_auto_rejected_count || 0;
+    return `可继续 · 初筛复核 · ${pending.toLocaleString()} 张建议放手待确认`;
+  }
+  if (resume.phase === "finished") {
+    return `已完成 · 留下 ${(resume.winner_count || 0).toLocaleString()} 张 · 放手 ${(resume.loser_count || 0).toLocaleString()} 张`;
+  }
+  const done = resume.finished_groups || 0;
+  const total = resume.total_groups || 0;
+  const parts = [`可继续 · 选片中`];
+  if (total) parts.push(`${done.toLocaleString()} / ${total.toLocaleString()} 组`);
+  if (resume.loser_count) parts.push(`已放手 ${resume.loser_count.toLocaleString()} 张`);
+  return parts.join(" · ");
+}
+
+function updateResumeSnapshot(resume) {
+  const actions = $("snap-resume-actions");
+  const workspace = $("snap-workspace");
+  const btn = $("resume-btn");
+  const text = resumeSummaryText(resume);
+  if (!actions || !btn) return;
+  const canResume = !!(resume && resume.can_resume);
+  actions.classList.toggle("hidden", !canResume);
+  btn.textContent = resume?.phase === "finished" ? "查看上次结果" : "继续上次进度";
+  if (workspace) {
+    workspace.textContent = resume?.updated_at_text
+      ? `保存于 ${resume.updated_at_text}`
+      : "";
+    workspace.title = resume?.workspace_dir || "";
+  }
+  return text;
+}
+
 function requestFolderPeek(folder) {
   clearTimeout(peekTimer);
   if (!folder || folder.length < 2) {
+    lastFolderPeek = null;
+    lastPeekFolder = "";
     $("folder-snapshot").classList.add("hidden");
+    $("snap-resume-actions")?.classList.add("hidden");
     setStatus("引擎就绪", "idle");
     return;
   }
@@ -553,11 +770,15 @@ async function doFolderPeek(folder) {
     return;
   }
   if (myToken !== peekToken) return;
+  lastPeekFolder = folder;
   if (!r.ok || !r.count) {
+    lastFolderPeek = r;
     $("folder-snapshot").classList.add("hidden");
+    $("snap-resume-actions")?.classList.add("hidden");
     setStatus(r.error || "未在该目录找到照片", "idle");
     return;
   }
+  lastFolderPeek = r;
   $("snap-count").textContent = r.count.toLocaleString();
   const period = r.latest ? `${r.earliest} – ${r.latest}` : r.earliest;
   $("snap-period").textContent = period;
@@ -565,7 +786,8 @@ async function doFolderPeek(folder) {
     ? `主要在 ${r.active_period} 拍摄`
     : "";
   $("snap-size").textContent = r.size_text;
-  $("snap-resume").textContent = r.span_days > 1 ? `跨 ${r.span_days} 天` : "";
+  const resumeText = updateResumeSnapshot(r.resume);
+  $("snap-resume").textContent = resumeText || (r.span_days > 1 ? `跨 ${r.span_days} 天` : "");
   const sw = $("snap-samples");
   sw.innerHTML = "";
   (r.samples || []).slice(0, 3).forEach((p) => {
@@ -576,7 +798,9 @@ async function doFolderPeek(folder) {
   });
   sw.style.display = r.samples?.length ? "" : "none";
   $("folder-snapshot").classList.remove("hidden");
-  setStatus(`已读取 ${r.count.toLocaleString()} 张 · 待处理`, "idle");
+  setStatus(r.resume?.can_resume
+    ? `已读取 ${r.count.toLocaleString()} 张 · 有可继续进度`
+    : `已读取 ${r.count.toLocaleString()} 张 · 待处理`, "idle");
 }
 
 $("folder-input").addEventListener("input", (e) => {
@@ -624,6 +848,14 @@ async function handleStart(e) {
   const near_seconds = parseInt($("thr-near-secs").value) * 60;
   $("start-error").textContent = "";
   if (!folder) { $("start-error").textContent = "请填写文件夹路径"; return; }
+
+  if (lastFolderPeek?.resume?.can_resume && lastPeekFolder === folder) {
+    const ok = await confirmDialog(
+      "重新开始这个文件夹？",
+      "检测到这个文件夹已有保存进度。重新开始会清掉 Pianke 工作区里的本次进度，并重新扫描分组。\n\n如果只是继续，请点“继续上次进度”。"
+    );
+    if (!ok) return;
+  }
 
   if (mode === "move" && !dry_run && !localStorage.getItem(CONFIRM_MOVE_KEY)) {
     const ok = await confirmDialog(
@@ -676,6 +908,41 @@ async function handleStart(e) {
 
 $("start-btn").addEventListener("click", handleStart);
 $("start-form").addEventListener("submit", handleStart);
+
+async function resumeSession(folder, btn = null) {
+  folder = (folder || "").trim();
+  if (!folder) { $("start-error").textContent = "请填写文件夹路径"; return; }
+  const oldText = btn?.textContent || "";
+  $("start-error").textContent = "";
+  if (btn) { btn.disabled = true; btn.textContent = "恢复中…"; }
+  $("start-btn").disabled = true;
+  try {
+    const r = await fetchJSON("/api/resume_session", {
+      method: "POST",
+      body: JSON.stringify({ folder }),
+    });
+    pushRecent(folder);
+    if (r.summary?.mode) currentMode = r.summary.mode;
+    setStatus("已恢复进度", "done");
+    await bootstrap();
+    loadSavedSessions();
+  } catch (err) {
+    $("start-error").textContent = err.message;
+    $("start-btn").disabled = false;
+    setStatus("恢复失败", "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = oldText || "继续";
+    }
+  }
+}
+
+async function resumeSelectedSession() {
+  await resumeSession($("folder-input").value.trim(), $("resume-btn"));
+}
+
+$("resume-btn")?.addEventListener("click", resumeSelectedSession);
 
 $("browse-btn").addEventListener("click", async () => {
   const btn = $("browse-btn");
@@ -1131,6 +1398,8 @@ $("btn-cancel-job").addEventListener("click", async () => {
 // =================================================================
 let prescreenItems = [];
 let prescreenFilter = "__all__";
+let prescreenGridExpanded = false;
+const PRESCREEN_COLLAPSE_THRESHOLD = 12;
 
 function shouldShowPrescreen(status) {
   return !!(
@@ -1207,16 +1476,47 @@ function renderPrescreenChips(items) {
   }
 }
 
+function getFilteredPrescreenItems() {
+  return prescreenFilter === "__all__"
+    ? prescreenItems
+    : prescreenItems.filter((it) => (it.reason || "其他") === prescreenFilter);
+}
+
+function updatePrescreenCollapseUI(items) {
+  const toggle = $("btn-prescreen-toggle-grid");
+  const wrap = $("prescreen-auto-grid-wrap");
+  const note = $("prescreen-collapse-note");
+  const shouldOfferCollapse = items.length > PRESCREEN_COLLAPSE_THRESHOLD;
+  const isCollapsed = shouldOfferCollapse && !prescreenGridExpanded;
+
+  wrap.classList.toggle("is-collapsed", isCollapsed);
+  toggle.classList.toggle("hidden", !shouldOfferCollapse);
+  toggle.textContent = isCollapsed ? "展开查看" : "收起照片";
+  toggle.setAttribute("aria-expanded", String(!isCollapsed));
+
+  if (!items.length) {
+    note.textContent = "";
+  } else if (isCollapsed) {
+    note.textContent = `已折叠 ${items.length} 张建议放手照片，可以直接进入选片；需要复核时再展开。`;
+  } else if (shouldOfferCollapse) {
+    note.textContent = `已展开 ${items.length} 张照片，点照片可保留到选片流程。`;
+  } else {
+    note.textContent = "";
+  }
+
+  return isCollapsed;
+}
+
 function renderPrescreenGrid() {
   const grid = $("prescreen-auto-grid");
   grid.innerHTML = "";
-  const items = prescreenFilter === "__all__"
-    ? prescreenItems
-    : prescreenItems.filter((it) => (it.reason || "其他") === prescreenFilter);
+  const items = getFilteredPrescreenItems();
+  const isCollapsed = updatePrescreenCollapseUI(items);
   if (!items.length) {
     grid.innerHTML = '<div class="winners-empty">这个分类下没有照片</div>';
     return;
   }
+  if (isCollapsed) return;
   items.forEach((item, i) => {
     const card = document.createElement("button");
     card.type = "button";
@@ -1260,6 +1560,7 @@ async function enterPrescreen(status) {
   const s = status || (await fetchJSON("/api/status"));
   lastSession = s;
   prescreenFilter = "__all__";
+  prescreenGridExpanded = false;
   try {
     const data = await fetchJSON("/api/auto_rejected");
     prescreenItems = data.items || [];
@@ -1516,6 +1817,13 @@ $("btn-prescreen-all").addEventListener("click", async () => {
     btn.textContent = "全部保留 · 我自己看";
   }
 });
+$("btn-prescreen-toggle-grid").addEventListener("click", () => {
+  prescreenGridExpanded = !prescreenGridExpanded;
+  renderPrescreenGrid();
+  if (!prescreenGridExpanded) {
+    $("prescreen-auto-section").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
 
 // =================================================================
 // 分组预览页
@@ -1658,12 +1966,13 @@ function setOverallProgress(s) {
   const total = s.multi_groups || 0;
   const done = Math.min(total, s.finished_multi_groups || 0);
   const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+  const rounds = s.remaining_rounds_estimate || 0;
   $("overall-fill").style.width = pct + "%";
   $("overall-text").textContent = total > 0
-    ? `${done} / ${total} 组`
+    ? `${done} / ${total} 组 · 约 ${rounds} 轮`
     : "全部为单图，无需选择";
   if (total > 0) {
-    setStatus(`选片中 · 已决 ${done} / ${total} 组`, "waiting");
+    setStatus(`选片中 · 已决 ${done} / ${total} 组 · 约 ${rounds} 轮`, "waiting");
   }
 }
 
@@ -1918,8 +2227,9 @@ function renderGroup(group, sessionStatus) {
     title = `连拍 ${total} 张`;
   }
   $("group-label").textContent = title;
+  const groupRounds = Math.max(0, (group.remaining_in_group || 0) - 1);
   $("group-prog-text").textContent =
-    `${decided} / ${total} 已决 · 剩 ${group.remaining_in_group}`;
+    `${decided} / ${total} 已决 · 剩 ${group.remaining_in_group} · 本组约 ${groupRounds} 轮`;
 
   ["side-left", "side-right"].forEach((id) => {
     $(id).classList.remove("is-winner", "is-loser", "is-broken");
@@ -2129,12 +2439,13 @@ $("btn-skip-group").addEventListener("click", () => skipGroup());
 $("btn-undo").addEventListener("click", () => undo());
 $("btn-quit").addEventListener("click", async () => {
   const ok = await confirmDialog(
-    "回到首页",
-    "回到首页处理另一个文件夹？当前进度已自动保存，下次可恢复。"
+    "暂停并回到首页？",
+    "当前进度已自动保存到 Pianke 工作区。回到首页后，可以从“最近任务”继续。"
   );
   if (!ok) return;
   showView("landing");
   $("start-btn").disabled = false;
+  loadSavedSessions();
 });
 
 // =================================================================
@@ -2448,6 +2759,28 @@ $("btn-open-folder").addEventListener("click", async () => {
   catch (e) { toast("打开失败：" + e.message); }
 });
 
+async function handoffToRetouch() {
+  const btn = $("btn-retouch-handoff");
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "交接中…";
+  try {
+    const r = await fetchJSON("/api/retouch_handoff", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    toast(`已送入修图流程清单：${r.count} 张`);
+    setStatus(`修图清单已生成 · ${r.count} 张`, "done");
+  } catch (e) {
+    toast("交接失败：" + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+}
+
+$("btn-retouch-handoff").addEventListener("click", handoffToRetouch);
+
 $("btn-redo-folder").addEventListener("click", async () => {
   const s = lastSession || (await fetchJSON("/api/status").catch(() => null));
   if (!s || !s.folder) { toast("没有可重做的会话"); return; }
@@ -2542,6 +2875,7 @@ $("lb-original").addEventListener("click", () => {
 // =================================================================
 async function bootstrap() {
   renderRecent();
+  loadSavedSessions();
   setStatus("引擎就绪", "idle");
   try {
     const s = await fetchJSON("/api/status");
