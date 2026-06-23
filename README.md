@@ -1,12 +1,32 @@
 # 片刻 (Pianke)
 
 > **让 AI 协助初筛与分组，把最终的审美决定权留给自己。**
+>
+> **Let AI handle the first pass of grouping and filtering, while you keep the final creative decision.**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#一键启动推荐)
 [![License: Pianke v2](https://img.shields.io/badge/license-Pianke%20v2-cc785c.svg)](LICENSE)
 
 **片刻** 是一款专为摄影师和摄影爱好者设计的**本地照片双语/擂台式选片工具**。它能够将一次拍摄中相似的几十甚至上百张照片自动归入“同一个瞬间”的组中，然后通过直观的 **左右 A/B 擂台 PK** 方式，让你快速挑出最满意的一张。
+
+**Pianke** is a local-first bilingual photo culling tool for photographers and photo enthusiasts. It groups visually similar shots from the same moment, filters out obvious failed images, and lets you make the final choice through a fast left-vs-right A/B selection workflow.
+
+---
+
+## Bilingual overview / 中英文说明
+
+### 中文
+
+片刻的目标不是替代摄影师的审美，而是把重复、耗时、机械的第一轮筛选交给 AI：扫描照片文件夹、识别明显废片、把相似连拍自动分组，并在后续擂台式对比中保留人工判断。极速和专家模式以本地处理为主，照片不会上传；土豪模式会把缩略图发送到你配置的大模型服务商，用于生成更接近人话的退片理由。
+
+本 fork 在原作者项目基础上，重点补充了适合大工程/大批量照片处理的断点继续能力和更完整的前端 UI 工作流。除这些本地增强外，项目仍保留原作者的产品定位、授权限制和免费使用原则。
+
+### English
+
+Pianke does not try to replace a photographer's taste. Instead, it gives AI the repetitive first pass: scan a photo folder, reject obvious failed shots, group burst or near-duplicate photos, and then present the remaining candidates in a fast A/B comparison flow where the human still makes the final call. Fast and Expert modes are designed for local processing, so photos stay on your machine. Tycoon mode can send thumbnails to the configured vision model provider to generate more human-readable rejection reasons.
+
+This fork keeps the original project's positioning, license restrictions, and free-use principle, while adding local improvements for large photo sets: resumable sessions for long-running projects and a more complete front-end UI workflow.
 
 ---
 
@@ -43,16 +63,23 @@
 
 ## 核心特性
 
+## Core features / 核心特性
+
 - 🔒 **照片不出本地**：除"土豪模式"外，所有分析、初筛、分组都在你自己的电脑里完成，不上传任何云端。
+- 🔒 **Local-first processing**: except for Tycoon mode, analysis, pre-screening, and grouping run on your own computer without uploading photos.
 - 🤖 **自动剔除明显废片**：模糊、过曝、欠曝、闭眼，自动识别并归到一边，担心错杀可一键复核召回。
+- 🤖 **Automatic rejection of obvious failed shots**: blur, exposure issues, closed eyes, and similar problems can be pre-screened before manual review.
 - 📁 **把同一瞬间的连拍归到一组**：理解"这几张是同一个画面"——同一个人、同一个场景、同一段时间，自动放在一起对比。
+- 📁 **Moment-based grouping**: similar shots from the same person, scene, or time window are grouped together for faster comparison.
 - ⚔️ **左右擂台两两对决**：按 `←` / `→` 选哪边更好，一组里只留一张（或几张），节奏极快。
+- ⚔️ **A/B culling arena**: compare two photos at a time and use the keyboard to keep the stronger candidate.
 - 📸 **原生支持 RAW**：
   - **RAW+JPG 同名双拍**：以 JPG 显示与分析，归档时 RAW 跟着自动一起搬走（含 `.xmp` 伴随文件）。
   - **纯 RAW**：从 RAW 文件里直接取出预览图，秒级读图，不卡。
 - 🔄 **随时反悔、随时续做**：
   - **多级撤销**：单步撤销、整组重选、全局回头都可以。
   - **进度自动保存**：随时关掉，下次启动接着上次继续。
+- 🔄 **Resume anytime**: progress is saved locally so long-running selection projects can be paused and continued later.
 
 ---
 

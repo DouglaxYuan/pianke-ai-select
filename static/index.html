@@ -31,6 +31,25 @@
       <p class="eyebrow">在一摞照片里，留下那一刻</p>
       <h1 class="hero-title">让 AI 替你过一遍，<br>由你做最后的<em>决定</em>。</h1>
       <p class="hero-sub">先按相似度自动成组、淘汰明显失败片，<br>剩下的两两摆上擂台，由你裁决。</p>
+      <p class="hero-sub" lang="en">
+        Let AI group similar shots and filter obvious rejects first.<br>
+        Then compare the finalists side by side and make the final call yourself.
+      </p>
+      <section class="saved-sessions" aria-label="Bilingual introduction">
+        <div class="saved-head">
+          <span>中英文说明 · Bilingual overview</span>
+        </div>
+        <div class="saved-session-list">
+          <div class="saved-session-card">
+            <strong>中文</strong>
+            <span>片刻是一款本地优先的 AI 选片工具：扫描照片文件夹、自动归组相似连拍、初筛明显废片，再用左右擂台让摄影师保留最终审美决定权。极速和专家模式尽量在本机处理；土豪模式会按你的配置调用视觉大模型。</span>
+          </div>
+          <div class="saved-session-card" lang="en">
+            <strong>English</strong>
+            <span>Pianke is a local-first AI photo culling tool. It scans a folder, groups similar burst shots, filters obvious rejects, and keeps the final aesthetic decision in the photographer's hands through a fast left-vs-right comparison flow.</span>
+          </div>
+        </div>
+      </section>
 
       <section id="saved-sessions" class="saved-sessions hidden" aria-live="polite">
         <div class="saved-head">
@@ -48,17 +67,17 @@
           <label class="engine-opt is-active" data-engine="fast">
             <input type="radio" name="engine" value="fast" checked>
             <span class="engine-title">极速模式</span>
-            <span class="engine-desc">本地秒级处理 · 无需联网 · 适合静物 / 风景 / 旧电脑</span>
+            <span class="engine-desc">本地秒级处理 · 无需联网 · 适合静物 / 风景 / 旧电脑<br>Fast local mode · Offline · Best for still life, landscape, and older computers</span>
           </label>
           <label class="engine-opt" data-engine="expert">
             <input type="radio" name="engine" value="expert">
             <span class="engine-title">专家模式</span>
-            <span class="engine-desc">本地精细识别 · 识人识脸更准 · 适合人像 / 婚礼 / 活动</span>
+            <span class="engine-desc">本地精细识别 · 识人识脸更准 · 适合人像 / 婚礼 / 活动<br>Detailed local analysis · Better for people, portraits, weddings, and events</span>
           </label>
           <label class="engine-opt engine-opt-tycoon" data-engine="tycoon">
             <input type="radio" name="engine" value="tycoon">
             <span class="engine-title">土豪模式 ¥</span>
-            <span class="engine-desc">用人话告诉你"为什么退这张" · 每张图 1-3 秒 · 需自备 Key</span>
+            <span class="engine-desc">用人话告诉你"为什么退这张" · 每张图 1-3 秒 · 需自备 Key<br>Vision-model review with human-readable rejection reasons · Bring your own API key</span>
           </label>
         </div>
         <div id="tycoon-model-picker" class="tycoon-model-picker" hidden>
@@ -237,7 +256,7 @@
 
     <footer class="landing-foot">
       <div class="landing-foot-row">
-        <span>本地运行 · 不上传照片</span>
+        <span>本地运行 · 不上传照片 / Local-first · No photo upload in local modes</span>
         <span>JPG · PNG · HEIC · WEBP · TIFF · RAW</span>
       </div>
       <div class="landing-foot-row landing-foot-github">
@@ -246,8 +265,8 @@
         </a>
       </div>
       <div class="landing-foot-row landing-foot-license">
-        <span>© 片刻 · 免费使用 · 禁止售卖本软件</span>
-        <span>商业再分发 / 二次开发授权请联系微信 15828377122</span>
+        <span>© 片刻 · 免费使用 · 禁止售卖本软件 / Free to use · Selling this software is prohibited</span>
+        <span>商业再分发 / 二次开发授权请联系微信 15828377122 · Commercial redistribution requires separate permission</span>
       </div>
     </footer>
   </div>
