@@ -8,6 +8,130 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#一键启动推荐)
 [![License: Pianke v2](https://img.shields.io/badge/license-Pianke%20v2-cc785c.svg)](LICENSE)
 
+## 项目主页介绍
+
+片刻是一个本地优先的 AI 辅助选片工具，面向摄影师、摄影工作室和需要整理大量照片的摄影爱好者。它解决的不是“替你决定审美”，而是把最耗时间的第一轮机械工作交给程序：扫描照片文件夹、读取 JPG/RAW/HEIC、生成缩略图、识别明显废片、把相似连拍归成同一组，再用左右 A/B 擂台让人快速决定哪一张更好。
+
+日常摄影工作里，一次活动、婚礼、写真或旅行可能有几百到几千张照片。人工从头翻到尾很容易疲劳，也容易在相似连拍里反复犹豫。片刻的价值是先把“明显不值得看的”和“应该放在一起比较的”整理好，让你集中精力做最后的审美判断。这样能更快交付成片，也能减少漏选、重复比对和临时中断带来的混乱。
+
+本仓库是基于原作者 [zhaoyue4810/pianke](https://github.com/zhaoyue4810/pianke) 的公开 fork。保留原项目名称、作者署名和 Pianke Software License Agreement v2，不改成 MIT。本 fork 主要补充大工程断点继续、前端流程和本地启动集成相关改动。
+
+## 技术框架和实现思路
+
+片刻是一个“本地 Web 应用”：
+
+- **Python + Flask**：提供本地 Web 服务和照片处理 API，默认打开 `http://localhost:5057`。
+- **Pillow / pillow-heif / rawpy**：读取 JPG、PNG、HEIC 和 RAW 预览，生成缩略图和水印输出。
+- **imagehash / numpy / scipy / OpenCV**：计算相似度、质量特征和基础图像分析。
+- **PyTorch / torchvision / transformers**：专家模式下用于视觉语义特征和更强的相似图分组。
+- **InsightFace / ONNX Runtime**：用于人像场景的人脸检测和特征提取。
+- **pyiqa / timm**：用于图像质量和美学评分辅助。
+- **OpenAI 兼容接口**：土豪模式可接入火山 Ark 等视觉模型服务，用于生成更接近人话的退片理由。
+- **原生 HTML/CSS/JavaScript 前端**：提供导入、进度、复核、分组、A/B 擂台、撤销、导出和水印界面。
+
+核心效果是把照片处理拆成几个可中断的阶段：扫描、初筛、分组、人工擂台、导出。状态写入照片目录下的 `.pic_selecter_state.json`，缩略图和日志写入 `_pic_selecter/`，因此大工程可以中途停止，下次继续。
+
+## 用户需要提供什么
+
+最少只需要：
+
+- 一个本地照片文件夹的绝对路径。
+- 选择处理模式：极速、专家或土豪。
+- 选择归档方式：移动或复制。
+
+根据场景可能还需要：
+
+- **土豪模式 API Key**：在网页弹窗填写，或通过 `ARK_API_KEY` 环境变量提供。
+- **端口**：默认 `5057`，可用 `PIC_SELECTER_PORT` 或 `python app.py --port 8080` 调整。
+- **工作区路径**：可用 `PIC_SELECTER_WORKSPACE` 指定运行缓存根目录。
+- **修图/接入工作区路径**：可用 `PIANKE_RETOUCH_WORKSPACE` 指定外部工作流目录。
+- **脚本访问 token**：如果要让脚本或 curl 调接口，可设置 `PIC_SELECTER_TOKEN`。
+- **运行设备选择**：可用 `PIC_SELECTER_RUNTIME=auto|cpu|gpu` 指定推理运行偏好。
+- **禁用国内镜像**：一键启动器默认适配国内镜像；如需禁用可设置 `PIANKE_NO_MIRROR=1`。
+
+这些变量都在启动前设置。示例：
+
+```bash
+export PIC_SELECTER_PORT=8080
+export PIC_SELECTER_RUNTIME=auto
+export ARK_API_KEY="your_ark_api_key"
+python app.py --port "$PIC_SELECTER_PORT"
+```
+
+## 给 OpenClaw / Agent 的快速开始
+
+把下面这段交给 OpenClaw、Codex、Claude Code 或小模型 agent，就能让它快速跑起来：
+
+```text
+这是一个 Python + Flask 的本地照片 AI 选片工具。请先确认仓库里有 LICENSE，不要改许可证；这是 Pianke Software License Agreement v2，不是 MIT。运行前创建虚拟环境，安装 requirements.txt。国内网络请优先使用阿里云或清华 PyPI 镜像。安装后如 cv2.saliency 缺失，卸载 opencv-python / opencv-python-headless，再安装 opencv-contrib-python。启动命令是 `python app.py --port 5057`，浏览器访问 `http://localhost:5057`。让用户在网页里填写照片文件夹绝对路径，选择极速/专家/土豪模式和移动/复制归档方式。土豪模式需要 ARK_API_KEY 或网页内填写 API Key。不要上传用户照片、模型缓存、workspace、.venv、日志或 .pic_selecter_state.json。
+```
+
+更完整的 agent 操作清单见 [docs/AGENT_QUICKSTART.md](docs/AGENT_QUICKSTART.md)。
+
+---
+
+## Project Overview
+
+Pianke is a local-first AI-assisted photo culling tool for photographers, studios, and anyone who needs to sort large photo sets. It does not try to replace creative taste. Instead, it automates the repetitive first pass: scan a folder, read JPG/RAW/HEIC files, build thumbnails, reject obvious failed shots, group visually similar burst photos, and present candidates in a fast left-vs-right A/B arena so the human can make the final selection.
+
+In real photography work, a wedding, event, portrait session, or trip can produce hundreds or thousands of images. Reviewing everything manually is slow and tiring. Pianke makes life easier by preparing the review surface: failed shots are separated, similar shots are grouped, and progress can resume after interruption. You spend more time choosing and less time fighting folders.
+
+This repository is a public fork of [zhaoyue4810/pianke](https://github.com/zhaoyue4810/pianke). It keeps the upstream name, attribution, and Pianke Software License Agreement v2. It is not relicensed as MIT. This fork focuses on large-project resume behavior, front-end workflow improvements, and local launch integration.
+
+## Technical Stack
+
+Pianke is a local web app:
+
+- **Python + Flask** for the local service and photo-processing API.
+- **Pillow / pillow-heif / rawpy** for JPG, PNG, HEIC, RAW previews, thumbnails, and watermark export.
+- **imagehash / numpy / scipy / OpenCV** for similarity, quality signals, and image analysis.
+- **PyTorch / torchvision / transformers** for expert-mode visual features.
+- **InsightFace / ONNX Runtime** for face detection and embeddings in portrait workflows.
+- **pyiqa / timm** for image-quality and aesthetic scoring.
+- **OpenAI-compatible API clients** for Tycoon mode, such as Volcengine Ark vision models.
+- **Native HTML/CSS/JavaScript front end** for import, progress, review, grouping, A/B selection, undo, export, and watermark UI.
+
+The workflow is staged and resumable: scan, pre-screen, group, manual A/B culling, and export. State is stored in `.pic_selecter_state.json` inside the photo folder; thumbnails and logs live under `_pic_selecter/`.
+
+## User Inputs And Environment Variables
+
+Minimum user input:
+
+- Absolute path to a local photo folder.
+- Mode: Fast, Expert, or Tycoon.
+- Archive behavior: move or copy.
+
+Optional configuration:
+
+- `ARK_API_KEY`: vision model key for Tycoon mode.
+- `PIC_SELECTER_PORT`: local web port, default `5057`.
+- `PIC_SELECTER_WORKSPACE`: runtime workspace root.
+- `PIANKE_RETOUCH_WORKSPACE`: external retouch/integration workspace.
+- `PIC_SELECTER_TOKEN`: optional token for script/API access.
+- `PIC_SELECTER_RUNTIME=auto|cpu|gpu`: runtime preference.
+- `PIANKE_NO_MIRROR=1`: disable launcher mirror defaults.
+
+Example:
+
+```bash
+export PIC_SELECTER_PORT=8080
+export PIC_SELECTER_RUNTIME=auto
+export ARK_API_KEY="your_ark_api_key"
+python app.py --port "$PIC_SELECTER_PORT"
+```
+
+## Agent Quickstart
+
+Give this to OpenClaw, Codex, Claude Code, or a smaller model agent:
+
+```text
+This is a Python + Flask local AI photo-culling tool. First verify that LICENSE remains Pianke Software License Agreement v2; do not convert it to MIT. Create a venv and install requirements.txt. On China mainland networks, use an Aliyun or Tsinghua PyPI mirror. If cv2.saliency is missing, uninstall opencv-python and opencv-python-headless, then install opencv-contrib-python. Start with `python app.py --port 5057` and open `http://localhost:5057`. Ask the user for an absolute photo-folder path, choose Fast/Expert/Tycoon mode, and choose move/copy archive mode. Tycoon mode needs ARK_API_KEY or an API key entered in the web UI. Never upload user photos, model caches, workspace data, .venv, logs, or .pic_selecter_state.json.
+```
+
+See [docs/AGENT_QUICKSTART.md](docs/AGENT_QUICKSTART.md) for a fuller agent checklist.
+
+---
+
 **片刻** 是一款专为摄影师和摄影爱好者设计的**本地照片双语/擂台式选片工具**。它能够将一次拍摄中相似的几十甚至上百张照片自动归入“同一个瞬间”的组中，然后通过直观的 **左右 A/B 擂台 PK** 方式，让你快速挑出最满意的一张。
 
 **Pianke** is a local-first bilingual photo culling tool for photographers and photo enthusiasts. It groups visually similar shots from the same moment, filters out obvious failed images, and lets you make the final choice through a fast left-vs-right A/B selection workflow.
