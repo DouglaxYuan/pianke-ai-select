@@ -24,7 +24,7 @@ except ImportError:
 
 
 # ─── 配置 ────────────────────────────────────────────────────────────────────
-TARGET_DIR    = Path("/Users/zhaoyue/pythonProject/pic_selecter/pic_test")
+TARGET_DIR    = Path(os.environ.get("PIANKE_TEST_TARGET_DIR", "pic_test")).resolve()
 TARGET_TOTAL_MB = 100          # 目标总大小（MB）
 MIN_QUALITY   = 20             # 最低 JPEG 质量（低于此不再降质量，转为缩放）
 MAX_QUALITY   = 95             # 二分上限

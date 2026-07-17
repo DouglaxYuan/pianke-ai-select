@@ -8,6 +8,11 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#一键启动推荐)
 [![License: Pianke v2](https://img.shields.io/badge/license-Pianke%20v2-cc785c.svg)](LICENSE)
 
+- **项目状态**：公开 fork，可用并持续维护本地增强
+- **当前版本**：0.2.0
+- **最后验证**：2026-07-18
+- **上游项目**：[zhaoyue4810/pianke](https://github.com/zhaoyue4810/pianke)
+
 ## 项目主页介绍
 
 片刻是一个本地优先的 AI 辅助选片工具，面向摄影师、摄影工作室和需要整理大量照片的摄影爱好者。它解决的不是“替你决定审美”，而是把最耗时间的第一轮机械工作交给程序：扫描照片文件夹、读取 JPG/RAW/HEIC、生成缩略图、识别明显废片、把相似连拍归成同一组，再用左右 A/B 擂台让人快速决定哪一张更好。
@@ -15,6 +20,14 @@
 日常摄影工作里，一次活动、婚礼、写真或旅行可能有几百到几千张照片。人工从头翻到尾很容易疲劳，也容易在相似连拍里反复犹豫。片刻的价值是先把“明显不值得看的”和“应该放在一起比较的”整理好，让你集中精力做最后的审美判断。这样能更快交付成片，也能减少漏选、重复比对和临时中断带来的混乱。
 
 本仓库是基于原作者 [zhaoyue4810/pianke](https://github.com/zhaoyue4810/pianke) 的公开 fork。保留原项目名称、作者署名和 Pianke Software License Agreement v2，不改成 MIT。本 fork 主要补充大工程断点继续、前端流程和本地启动集成相关改动。
+
+## 适合谁使用
+
+- 需要从婚礼、活动、写真、旅行等数百至数千张照片中完成第一轮整理的摄影师或爱好者。
+- 希望相似连拍先自动分组，再由自己通过 A/B 对比做最终审美选择的人。
+- 希望照片默认留在本机，并能暂停后继续大型选片工程的人。
+
+不适合把 AI 评分当成最终审美结论、未经备份直接移动唯一一份原片，或希望把软件包装成收费产品/服务的场景。土豪模式会向用户配置的模型服务发送缩略图，隐私敏感项目应使用极速或专家模式。
 
 ## 技术框架和实现思路
 
@@ -56,6 +69,18 @@ export PIC_SELECTER_PORT=8080
 export PIC_SELECTER_RUNTIME=auto
 export ARK_API_KEY="your_ark_api_key"
 python app.py --port "$PIC_SELECTER_PORT"
+```
+
+## 最小使用链路
+
+```text
+备份原片
+  → 选择本地照片文件夹与模式
+  → AI 初筛明显废片
+  → 相似照片分组
+  → 人工 A/B 选择
+  → 导出 winners/losers
+  → 保留状态以便继续或撤销
 ```
 
 ## 给 OpenClaw / Agent 的快速开始
@@ -404,6 +429,22 @@ Windows 系统可能需要安装微软官方的 HEIF 扩展才能正常在浏览
 2. 程序起的服务**只在你自己的电脑回环地址（127.0.0.1）上监听**，局域网和外网设备都访问不到。
 3. 接口做了严格的来源校验，防止任何外部网站偷偷调用。需要给脚本开启额外鉴权，可在启动前设置环境变量 `PIC_SELECTER_TOKEN=你的口令`。
 4. ⚠️ **土豪模式例外**：该模式下，照片的缩略图会被发到你配置的大模型服务商接口（按 token 计费）。对隐私要求极高的场景请只用**极速**或**专家**模式。
+
+## 已知限制与维护边界
+
+- 这是带本地增强的公开 fork，上游核心行为、品牌和许可证边界继续归原项目；本仓库不会把上游成果描述为原创。
+- RAW/HEIC、GPU、模型依赖和 OpenCV 组合会受系统与硬件影响，首次使用应先复制少量照片测试。
+- “移动”归档会改变照片位置；没有独立备份时优先使用“复制”。
+- AI 初筛和评分可能误判，最终交付前必须人工复核 winners 与 losers。
+
+## 文档导航
+
+- [Agent 快速开始](docs/AGENT_QUICKSTART.md)
+- [本地修改说明](docs/LOCAL_MODIFICATIONS.md)
+- [Fork 与上游归属](FORK_NOTICE.md)
+- [发布检查清单](docs/PUBLISHING_CHECKLIST.md)
+- [安全说明](SECURITY.md)
+- [版本记录](CHANGELOG.md)
 
 ---
 
